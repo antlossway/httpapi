@@ -31,12 +31,13 @@ def read_config():
 ########################
 
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
 logger.setLevel(logging.DEBUG)
 logging.Formatter.converter = time.gmtime
-# create a console handler
-c_handler = logging.StreamHandler()
-c_handler.setLevel(logging.INFO)
+
+## create a console handler
+#c_handler = logging.StreamHandler()
+#c_handler.setLevel(logging.INFO)
+
 # create a file handler
 handler = logging.FileHandler(log)
 # handler.setLevel(logging.INFO)
@@ -45,11 +46,10 @@ handler.setLevel(logging.DEBUG)
 # create a logging format
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
+
 # add the handler to the logger
 logger.addHandler(handler)
-logger.addHandler(c_handler)
-
-
+#logger.addHandler(c_handler)
 
 ########################
 ### Configurations   ###
