@@ -25,7 +25,11 @@ min_len_msisdn = 10 #without prefix like 00 or +
 max_len_msisdn = 15 #ITU-T recommendation E.164
 max_len_tpoa = 11
 
-app = FastAPI()
+app = FastAPI(docs_url='/api/docs', 
+            redoc_url='/api/redoc',
+            openapi_url='/api/openapi.json'
+
+)
 
 class SMS(BaseModel): 
     #"from" is the public name of the field, can not use "from" direct as a field name in basemodel because it is keyword in python
