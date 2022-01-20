@@ -1,3 +1,4 @@
+from textwrap import indent
 from typing import Optional,List
 from fastapi import FastAPI, Body, Response, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -13,7 +14,7 @@ import myutils
 from myutils import logger, config, read_config
 import mysms
 #from mysms import create_sms
-import mydb
+import mydb #d_account
 #import httpapi.myauth as myauth => does not work, saying there is no package httpapi
 import myauth
 
@@ -24,6 +25,8 @@ import myauth
 min_len_msisdn = 10 #without prefix like 00 or +
 max_len_msisdn = 15 #ITU-T recommendation E.164
 max_len_tpoa = 11
+
+redis_status_expire = 15*24*3600 # STATUS:<msgid1> => <status> for /sms/:msgid query_dlr
 
 app = FastAPI(docs_url='/api/docs', 
             redoc_url='/api/redoc',
@@ -66,6 +69,13 @@ class SMSResponse(BaseModel):
     errorcode: int = Field(description="indicate result of creating SMS, 0 means successful", default=0)
     message_count: int = Field(alias="message-count",description="indicate the number of SMS created (for concatenated SMS)", default=1)
     messages: List[Msg]
+
+class CallbackDLR(BaseModel):
+    msisdn: str
+    msgid: str
+    status: str
+    to: Optional[str]
+    timestamp: Optional[str]
 
 def is_empty(field):
     if field == '' or field == None:
@@ -187,6 +197,7 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
             "sender": sender,
             "to": msisdn,
             "content": xms,
+            "require_dlr": require_dlr,
             "country_id": 3,
             "operator_id": 3
         }
@@ -208,3 +219,50 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
     logger.info(json.dumps(resp_json, indent=4))
  
     return resp_json
+
+@app.post('/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
+async def callback_dlr(arg_dlr: CallbackDLR):
+    d_dlr = arg_dlr.dict()
+    logger.info("### receive DLR")
+    logger.info(json.dumps(d_dlr, indent=4))
+    bnumber = arg_dlr.msisdn
+    msgid2 = arg_dlr.msgid
+    status = arg_dlr.status
+    timestamp = arg_dlr.timestamp
+    
+    bnumber = re.sub(r'^\+','',bnumber) #remove beginning +
+    bnumber = re.sub(r'^0+','',bnumber) #remove beginning 0
+    bnumber = "+" + bnumber #add back beginning +
+
+    #query redis MSGID2:msgid2 => msgid1:::api_key:::require_dlr
+    msg_info = mydb.r.get(f"MSGID2:{msgid2}")
+    
+    if msg_info:
+        msg_info = msg_info.decode("utf-8") # result from redis-server is byte, need to convert to str
+        logger.info(f"## find mapping msgid1 for msgid2 {msgid2}: {msg_info}")
+        msgid1, api_key, require_dlr = msg_info.split(":::")
+        if int(require_dlr) == 1:
+            ac = mydb.d_account.get(api_key)
+            callback_url = ac.get('callback_url')
+            logger.info(f"will push back DLR to {callback_url}")
+            pass # TBD: push back DLR to client
+        
+        ### notif3: to be processed by notif3update to update status in cdr
+        sql = f"insert into notif3 (bnumber,msgid,localid,status) values ('{bnumber}','{msgid2}','{msgid1}','{status}');"
+        logger.info(sql)
+        mydb.cur.execute(sql)
+
+        ### redis: STATUS:msgid1 => status
+        k = f"STATUS:{msgid1}"
+        mydb.r.setex(k, redis_status_expire, value=status)
+        logger.info(f"SETEX {k} {redis_status_expire} {status}")
+
+    else:
+        logger.warning(f"!!! no msgid1 mapping found for {msgid2}")
+
+
+
+
+
+
+    

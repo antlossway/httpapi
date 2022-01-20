@@ -6,7 +6,7 @@ from configparser import ConfigParser
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 log = basedir + '/log/' + 'httpapi.log'
-config_file = basedir + '/' + '.config'
+config_file = basedir + '/' + '.config' # to keep private info, DB password, API credential ...
 
 def read_config():
     config = ConfigParser()

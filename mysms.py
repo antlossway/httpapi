@@ -6,6 +6,8 @@ import json
 
 from myutils import logger,config
 
+notif1_expire = 5*24*3600 #redis: MSGID2:msgid2 => msgid1:::api_key:::require_dlr
+
 """
 example request and response body to be displayed in API document
 """
@@ -136,6 +138,9 @@ def create_sms_ameex(ac,data,provider):
     sender = data.get('sender')
     msisdn = data.get('to')
     xms = data.get('content')
+    msgid1 = data.get('msgid')
+    require_dlr = data.get('require_dlr')
+
     api_key,api_secret = config['provider_api_credential'].get(provider).split('---')
     logger.debug(f"debug provider_api_credential for {provider}: {api_key} {api_secret}")
 
@@ -157,6 +162,19 @@ def create_sms_ameex(ac,data,provider):
     
     if res_split != 1:
         logger.warning(f"!!! split result different from AMEEX {res_split}")
+
+    ### TBD: redis pipeline
+    ### record notif1 in redis, for callback_dlr to map msgid1 and callback_url of client
+    k = f"MSGID2:{res_msgid}"
+    v = f"{msgid1}:::{api_key}:::{require_dlr}"
+    mydb.r.setex(k,notif1_expire, value=v)
+    logger.info(f"SETEX {k} {notif1_expire} {v}")
+
+    ### record msgid1 => msgid2, for API endpoint /sms/:msgid1 to query_dlr, check if msgid1 exists
+    k = f"MSGID1:{msgid1}"
+    v = res_msgid
+    mydb.r.setex(k,notif1_expire, value=v)
+    logger.info(f"SETEX {k} {notif1_expire} {v}")
 
     return res_error,res_msgid
     
