@@ -31,7 +31,7 @@ def read_config(cfg):
 ## global variable ##
 #####################
 log_dir = os.path.join(basedir, "../log/")
-lock_dir = os.path.join(basedir, "../var/lock")
+lock_dir = os.path.join(basedir, "../var/lock/")
 
 log = log_dir + "send_campaign.log"
 lockfile= lock_dir + 'send_campaign.lock'
