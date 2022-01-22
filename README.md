@@ -3,6 +3,14 @@
 This is a backend for white-label SMS platform using fastAPI.
 
 
+
+Install system package
+apt install cpanminus
+
+perl module DBI
+perl -MCPAN -e 'install Bundle::DBI'
+cpanm install DBD::Pg
+
 Install database
 - postgresql
 - redis-server

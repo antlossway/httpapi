@@ -1,10 +1,12 @@
 import os
-import mydb # redis client
+import mydb # r => redis connector, cur => postgres
 from uuid import uuid4
 import requests
 import json
+import re
 
 from myutils import logger,config
+from mydb import g_numbering_plan
 
 notif1_expire = 5*24*3600 #redis: MSGID2:msgid2 => msgid1:::api_key:::require_dlr
 
@@ -164,13 +166,13 @@ def create_sms_ameex(ac,data,provider):
         logger.warning(f"!!! split result different from AMEEX {res_split}")
 
     ### TBD: redis pipeline
-    ### record notif1 in redis, for callback_dlr to map msgid1 and callback_url of client
+    ### record MSGID2:<msgid2> => <msgid1>:::<api_key>:::<require_dlr>, for callback_dlr to map msgid1 and callback_url of client
     k = f"MSGID2:{res_msgid}"
     v = f"{msgid1}:::{api_key}:::{require_dlr}"
     mydb.r.setex(k,notif1_expire, value=v)
     logger.info(f"SETEX {k} {notif1_expire} {v}")
 
-    ### record msgid1 => msgid2, for API endpoint /sms/:msgid1 to query_dlr, check if msgid1 exists
+    ### record MSGID1:<msgid1> => <msgid2>, for API endpoint /sms/:msgid1 to query_dlr, check if msgid1 exists
     k = f"MSGID1:{msgid1}"
     v = res_msgid
     mydb.r.setex(k,notif1_expire, value=v)
@@ -216,7 +218,6 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
         #record into redis cdr_cache
         sql = f"insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,dcs,len,udh,xms) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',{country_id},{operator_id},0,{len(xms)},'{udh}','{xms}');"
         logger.info(sql)
-        ## TBD: insert into redis MSGID1:<msgid1> => <msgid2> for query_status API endpoint, to see if msgid1 exists
         if mydb.r.lpush('cdr_cache',sql): #successful transaction return True
             logger.info(f"LPUSH cdr_cache OK")
         else:
@@ -226,25 +227,54 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     
     return error
 
-        
+
+def clean_msisdn(msisdn):
+    number = msisdn.strip() #remove trailing whitespaces
+    number = re.sub(r'^\++', r'',number) #remove leading +
+    number = re.sub(r'^0+', r'',number) #remove leading 0
+
+    if re.search(r'\D+',number): #include non-digit
+        return None
+
+    number = re.sub(r'^',r'+',number) #add back leading +
+
+    if len(number) < 11 or len(number) > 16:
+        return None
+
+    return number
+
+def parse_bnumber(np,msisdn):
+  result = None
+  while len(msisdn) > 0:
+    if msisdn in np.keys():
+      result = np[msisdn]
+      break
+    else:
+      msisdn = msisdn[:-1]  #remove last digit
+  return result
 
     
 if __name__ == '__main__':
-    msgid = str(uuid4())
-    ac = {
-        'webuser_id': 1,
-        'billing_id': 1,
-        'product_id': 0
-    }
+    # msgid = str(uuid4())
+    # ac = {
+    #     'webuser_id': 1,
+    #     'billing_id': 1,
+    #     'product_id': 0
+    # }
 
-    data = {
-        "msgid": msgid,
-        "sender": "NOC",
-        "to": "+6586294138",
-        "content": "hello world!",
-        "country_id": 95,
-        "operator_id": 95,
-    }
-    error,msgid2 = create_sms_ameex(ac,data,'AMEEX_PREMIUM')
-    print(f"debug call result: {error}, {msgid2}")
+    # data = {
+    #     "msgid": msgid,
+    #     "sender": "NOC",
+    #     "to": "+6586294138",
+    #     "content": "hello world!",
+    #     "country_id": 95,
+    #     "operator_id": 95,
+    # }
+    # error,msgid2 = create_sms_ameex(ac,data,'AMEEX_PREMIUM')
+    # print(f"debug call result: {error}, {msgid2}")
+
+    result = parse_bnumber(g_numbering_plan, '+089')
+    if result:
+        cid,opid = result.split('---')
+        print(cid,opid)
 

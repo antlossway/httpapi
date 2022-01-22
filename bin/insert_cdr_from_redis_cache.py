@@ -16,13 +16,11 @@ from configparser import ConfigParser
 #####################
 
 basedir = os.path.abspath(os.path.dirname(__file__)) + "/../"
-config_dir = basedir + "config/"
-redis_cfg = config_dir + "redis.cfg"
 redis_cdr_list = "cdr_cache"
 redis_error_list = "cdr_error"
 
 log_dir = basedir + "log/"
-lock_dir = basedir + "lock/"
+lock_dir = basedir + "var/lock/"
 
 log = log_dir + "insert_cdr_from_redis_cache.log"
 lockfile= lock_dir + 'insert_cdr_from_redis_cache.lock'

@@ -7,7 +7,7 @@ import secrets
 import hashlib
 
 from myutils import logger
-import mydb #userinfo is global variable
+from mydb import g_userinfo, g_account
 
 security = HTTPBasic()
 
@@ -36,7 +36,7 @@ def myauth_basic_legacy(credentials: HTTPBasicCredentials = Depends(security)):
     #ac = users.get(credentials.username,None)
     #expected_secret_enc = ac.get('secret')
 
-    ac = mydb.userinfo.get(credentials.username,None) #dict
+    ac = g_userinfo.get(credentials.username,None) #dict
 
     if ac:
         expected_secret_enc = ac.get('secret_enc',None)
@@ -65,7 +65,7 @@ def myauth_basic_legacy(credentials: HTTPBasicCredentials = Depends(security)):
 def myauth_basic(credentials: HTTPBasicCredentials = Depends(security)):
     logger.debug(f"debug: {credentials}")
 
-    ac = mydb.d_account.get(credentials.username,None) #dict
+    ac = g_account.get(credentials.username,None) #dict
     #     ac = {
     #     "api_key": api_key,
     #     "api_secret": api_secret,

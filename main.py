@@ -14,7 +14,7 @@ import myutils
 from myutils import logger, config, read_config
 import mysms
 #from mysms import create_sms
-import mydb #d_account
+from mydb import cur,r,g_account,g_numbering_plan
 #import httpapi.myauth as myauth => does not work, saying there is no package httpapi
 import myauth
 
@@ -119,19 +119,9 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
         raise HTTPException(status_code=422, detail=f"missing parameter, please check if you forget 'from','to',or 'content'")
 
     ### msisdn format wrong
-    msisdn = re.sub(r'^\++', r'', msisdn)
-    msisdn = re.sub(r'^0+', r'', msisdn)
-    len_to = len(msisdn)
-    if len_to < min_len_msisdn or len_to > max_len_msisdn or re.match(r'\D', msisdn):
-        # result = {
-        #     "errorcode": 3,
-        #     "errormsg": "B-number is invalid"
-        # }
-        # response.status_code = 422
+    msisdn = mysms.clean_msisdn(msisdn)
+    if not msisdn:
         raise HTTPException(status_code=422, detail=f"B-number {msisdn} is invalid")
-
-
-    msisdn = f"+{msisdn}" #put back + at beginning
     
     ### sender format wrong
     len_sender = len(sender)
@@ -144,9 +134,12 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
 
         raise HTTPException(status_code=422, detail=f"TPOA/Sender length should not be more than {max_len_tpoa} characters")
 
-    ### TBD check B-number country/operator ###
-
-    ### TBD chck 
+    ### check B-number country/operator ###
+    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
+    if parse_result:
+        country_id,operator_id = parse_result.split('---')
+    else:
+        raise HTTPException(status_code=422, detail=f"Receipient number does not belong to any network")
 
     ### optional param
     #base64 = d_sms.get("base64url",0)
@@ -198,8 +191,8 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
             "to": msisdn,
             "content": xms,
             "require_dlr": require_dlr,
-            "country_id": 3,
-            "operator_id": 3
+            "country_id": country_id,
+            "operator_id": operator_id
         }
         
         errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
@@ -220,7 +213,7 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
  
     return resp_json
 
-@app.post('/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
+@app.post('/dlr/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
 async def callback_dlr(arg_dlr: CallbackDLR):
     d_dlr = arg_dlr.dict()
     logger.info("### receive DLR")
@@ -235,14 +228,14 @@ async def callback_dlr(arg_dlr: CallbackDLR):
     bnumber = "+" + bnumber #add back beginning +
 
     #query redis MSGID2:msgid2 => msgid1:::api_key:::require_dlr
-    msg_info = mydb.r.get(f"MSGID2:{msgid2}")
+    msg_info = r.get(f"MSGID2:{msgid2}")
     
     if msg_info:
         msg_info = msg_info.decode("utf-8") # result from redis-server is byte, need to convert to str
         logger.info(f"## find mapping msgid1 for msgid2 {msgid2}: {msg_info}")
         msgid1, api_key, require_dlr = msg_info.split(":::")
         if int(require_dlr) == 1:
-            ac = mydb.d_account.get(api_key)
+            ac = g_account.get(api_key)
             callback_url = ac.get('callback_url')
             logger.info(f"will push back DLR to {callback_url}")
             pass # TBD: push back DLR to client
@@ -250,11 +243,11 @@ async def callback_dlr(arg_dlr: CallbackDLR):
         ### notif3: to be processed by notif3update to update status in cdr
         sql = f"insert into notif3 (bnumber,msgid,localid,status) values ('{bnumber}','{msgid2}','{msgid1}','{status}');"
         logger.info(sql)
-        mydb.cur.execute(sql)
+        cur.execute(sql)
 
         ### redis: STATUS:msgid1 => status
         k = f"STATUS:{msgid1}"
-        mydb.r.setex(k, redis_status_expire, value=status)
+        r.setex(k, redis_status_expire, value=status)
         logger.info(f"SETEX {k} {redis_status_expire} {status}")
 
     else:

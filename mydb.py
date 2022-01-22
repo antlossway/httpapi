@@ -9,8 +9,9 @@ from myutils import config,logger
 ########################
 ### Global Variables ###
 ########################
-userinfo = defaultdict(dict) #info from legacy table 
-d_account = defaultdict(dict) #info from new tables
+g_userinfo = defaultdict(dict) #info from legacy table 
+g_account = defaultdict(dict) #info from new tables
+g_numbering_plan = dict()
 
 # basedir = os.path.abspath(os.path.dirname(__file__))
 # config_dir = basedir + "/" + "config/"
@@ -66,14 +67,14 @@ except:
 #     (acid,acname,api_key,api_secret_enc,salt,dir,currency) = row
 #     #logger.info(acid,api_key,api_secret_enc,salt,dir,currency)
 
-#     userinfo[api_key]['secret_enc'] = api_secret_enc
-#     userinfo[api_key]['salt'] = salt
-#     userinfo[api_key]['name'] = acname
-#     userinfo[acname]['dir'] = dir
-#     userinfo[acname]['customerid'] = acid
-#     userinfo[acname]['currency'] = currency
+#     g_userinfo[api_key]['secret_enc'] = api_secret_enc
+#     g_userinfo[api_key]['salt'] = salt
+#     g_userinfo[api_key]['name'] = acname
+#     g_userinfo[acname]['dir'] = dir
+#     g_userinfo[acname]['customerid'] = acid
+#     g_userinfo[acname]['currency'] = currency
 
-# for k,v in userinfo.items():
+# for k,v in g_userinfo.items():
 #     print(k,v)
 
 cur.execute("""select api_key,api_secret, b.id as billing_id, b.company_name, webuser_id, w.username as webuser_name,product_id,
@@ -93,10 +94,30 @@ for row in rows:
         "product_name": product_name,
         "callback_url": callback_url
     }
-    d_account[api_key] = ac
+    g_account[api_key] = ac
 
 logger.info("### print all ap_credentials")
-for api_key,ac in d_account.items():
+for api_key,ac in g_account.items():
     logger.info(f" - {api_key}")
     logger.info(json.dumps(ac, indent=4))
     
+### select numbering plan 
+def get_numbering_plan(cur):
+    np = {}
+    sql = "select prefix,countryid,operatorid from numbering_plan;"
+    try:
+        cur.execute(sql)
+        rows = cur.fetchall()
+        for row in rows:
+            prefix = row[0]
+            cid = row[1]
+            opid = row[2]
+            np[prefix] = f"{cid}---{opid}"
+    except:
+        logger.warning("!!! problem fetching numbering_plan")
+        return None
+
+    return np
+
+g_numbering_plan = get_numbering_plan(cur)
+logger.info(f"### get_numbering_plan: {len(g_numbering_plan)} entries")
