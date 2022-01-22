@@ -97,7 +97,15 @@ if __name__ == '__main__':
     l_data = read_comma_sep_lines(lines) #list of dict
 
     if l_data: #if there are valid entries from the input
-        cpg_id = random.randint(1,10000)
+        #cpg_id = random.randint(1,10000)
+        cpg_id = 1
+        cpg_name = "cpg" + str(cpg_id)
+        tpoa = "loadtest"
+        billing_id,webuser_id,product_id = 1,2,0
+        xms = f"welcome to shop {cpg_id}"
+        sql = f"""insert into cpg (name,tpoa,billing_id,webuser_id,product_id,xms) values ('{cpg_name}','{tpoa}',{billing_id},{webuser_id},{product_id},'{xms}');"""
+        print(sql)
+        
         for d in l_data:
             hash_value = d.get('hash',None)
             if hash_value:

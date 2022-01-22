@@ -142,6 +142,7 @@ def create_sms_ameex(ac,data,provider):
     xms = data.get('content')
     msgid1 = data.get('msgid')
     require_dlr = data.get('require_dlr')
+    udh = data.get('udh')
 
     api_key,api_secret = config['provider_api_credential'].get(provider).split('---')
     logger.debug(f"debug provider_api_credential for {provider}: {api_key} {api_secret}")
@@ -149,7 +150,8 @@ def create_sms_ameex(ac,data,provider):
     req_data = {
         "from": sender,
         "to": msisdn,
-        "content": xms
+        "content": xms,
+        'udh': udh
     }
 
     url = f"https://{api_key}:{api_secret}@a2p.ameex-mobile.com/api/sms"
@@ -191,7 +193,7 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     #     "webuser_id": webuser_id,
     #     "webuser_name": webuser_name,
     #     "product_id": product_id,
-    #     "product_name": product_name
+    #     "product_name": product_name,
     #     }
 
     logger.info(f"debug: account {ac}")
