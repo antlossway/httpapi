@@ -15,8 +15,6 @@ def connectdb():
     cfg = os.path.join(basedir, "../etc/config.txt")
 
     config = read_config(cfg)
-    for k,v in config['postgresql'].items():
-        print(f"{k} => {v}")
 
     db_host = config['postgresql']['host']
     db_port = config['postgresql']['port']

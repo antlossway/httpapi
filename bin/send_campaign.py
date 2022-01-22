@@ -42,7 +42,6 @@ cfg = os.path.join(basedir, "../etc/config.txt")
 config = read_config(cfg)
 master_key = config['api_test']['api_key']
 master_secret = config['api_test']['api_secret']
-print(f"master_key: {master_key}, master_secret: {master_secret}")
 
 #####################
 ## log configuration 
@@ -69,8 +68,8 @@ except Exception as error:
     exit()
 
 numbering_plan = DB.get_numbering_plan(cur)
-print(f"### get_numbering_plan: {len(numbering_plan)} entries")
-
+logger.info(f"### get_numbering_plan: {len(numbering_plan)} entries")
+logger.info(f"master_key: {master_key}, master_secret: {master_secret}")
 
 def check_pid_running(pid):
     try:
@@ -88,7 +87,7 @@ def leave(signal, frame): #INT, TERM
  
 def get_cpg_list(cur,cpg_id):
     sql = f"""select hash,field_name,value from cpg_blast_list where cpg_id={cpg_id}"""
-    print(sql)
+    logger.info(sql)
     d = defaultdict(dict)
     cur.execute(sql)
     rows = cur.fetchall()
@@ -111,7 +110,6 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
 
     ### get country_id, operator_id
     bnumber = DB.clean_msisdn(bnumber)
-    print(f"after clean_msisdn: {bnumber}")
     parse_result = DB.parse_bnumber(numbering_plan,bnumber)
     if parse_result:
         country_id,operator_id = parse_result.split('---')
@@ -119,7 +117,7 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
         logger.warning(f"!!! unknown destination {bnumber}")
         return None
     
-    print(f"bnumber {bnumber}, cid {country_id}, opid {operator_id}")
+    logger.info(f"bnumber {bnumber}, cid {country_id}, opid {operator_id}")
 
     ### TBD: find in custome_operator_routing which provider_id to use, and use that provider's connector to send SMS
     # provider_id = get_provider_id(product_id,country_id,operator_id)
@@ -136,9 +134,7 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
         try:
             xms = re.sub(pattern, value, xms)
         except Exception as err:
-            print(f"!!! {err}")
-        print(f"replace {pattern} with {value}: {xms}")
-
+            logger.warning(f"!!! {err}")
     print(f"final SMS content: {xms}")
 
     data = {
@@ -164,8 +160,8 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
     if resp.ok:
         logger.info(f"resp.text: {resp.text}")
     else:
-        print("NOK")
-        print(resp.raise_for_status())
+        logger.warning("!!! NOK")
+        logger.info(resp.raise_for_status())
 
 
 def main():
@@ -233,11 +229,11 @@ def main():
          
                 end_time = time.time()
                 duration = int(end_time - start_time)
-                print(f"duration: {duration}")
+                logger.info(f"duration: {duration}")
 
                 cur.execute(f"update cpg set status = 'SENT' where id = {cpg_id}")
             else:
-                print(f"!!! no blast list found for cpg_id {cpg_id}")
+                logger.warning(f"!!! no blast list found for cpg_id {cpg_id}")
         if count == 0:
             logger.info("Keep Alive")
         
