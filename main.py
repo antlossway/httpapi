@@ -87,7 +87,7 @@ async def home():
     return {'result': 'hello'}
 
 #@app.post('/sms', status_code=201)
-@app.post('/sms', response_model=SMSResponse, responses=mysms.example_create_sms_response)
+@app.post('/api/sms', response_model=SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
 async def post_sms(
                 arg_sms: SMS = Body(
@@ -213,7 +213,7 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
  
     return resp_json
 
-@app.post('/dlr/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
+@app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
 async def callback_dlr(arg_dlr: CallbackDLR):
     d_dlr = arg_dlr.dict()
     logger.info("### receive DLR")
