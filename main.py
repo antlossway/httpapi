@@ -322,11 +322,16 @@ async def create_campaign(arg_new_cpg: InternalNewCampaign, request: Request):
  
     return resp_json
 
-    
+whitelist_ip = ['127.0.0.1','localhost']
 @app.post('/api/internal/sms', response_model=SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
 async def post_sms(arg_sms: InternalSMS, request:Request):
     logger.info(f"{request.url.path}: from {request.client.host}")
+    ### only allow whitelisted IP
+    client_ip = request.client.host
+    if not request.client.host in whitelist_ip:
+        raise HTTPException(status_code=401, detail=f"unauthorized access")
+        
     d_sms = arg_sms.dict()
     logger.info(f"debug post body")
     logger.info(json.dumps(d_sms,indent=4))
