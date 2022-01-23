@@ -29,5 +29,6 @@ uvicorn==0.16.0
 uvloop==0.16.0
 watchgod==0.7
 websockets==10.1
+Werkzeug==2.0.2
 wrapt==1.13.3
 zipp==3.7.0

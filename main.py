@@ -1,8 +1,8 @@
-from textwrap import indent
-from typing import Optional,List
+#from textwrap import indent
+#from typing import Optional,List
+#from pydantic import BaseModel, Field
+
 from fastapi import FastAPI, Body, Response, HTTPException, Depends, Request
-from pydantic import BaseModel, Field
-from fastapi.security import HTTPBasic,HTTPBasicCredentials
 
 import re
 import smsutil
@@ -17,6 +17,7 @@ import mysms
 from mydb import cur,r,g_account,g_numbering_plan
 #import httpapi.myauth as myauth => does not work, saying there is no package httpapi
 import myauth
+import models
 
 ########################
 ### Global Variables ###
@@ -34,60 +35,6 @@ app = FastAPI(docs_url='/api/docs',
 
 )
 
-class SMS(BaseModel): 
-    #"from" is the public name of the field, can not use "from" direct as a field name in basemodel because it is keyword in python
-    sender: str = Field(alias='from',description="SenderID", min_length=2, max_length=11, example="Example") 
-    to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
-                    min_length=10, max_length=20, example="96650403020")
-    content: str = Field(description="SMS content. it can include any unicode defined characters in UTF-8 format",
-                            example="Hello World!")
-    base64url: Optional[int] = Field(default=0,description="to declare that content is base64url encoded. \
-                                    this is recommended to avoid encoding issue for non-latin characters")
-    status_report_req: Optional[int] = Field(alias='status-report-req', default=1) #can not use "-" directly in the base model
-
-    udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")
-
-class Msg(BaseModel):
-    msgid: str = Field(description="unique message ID to identify an created SMS",example="77b16382-7871-40bd-a1ac-a26c6ccce687")
-    to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
-                    min_length=10, max_length=20, example="96650403020")
-
-class SMSResponse(BaseModel):
-    errorcode: int = Field(description="indicate result of creating SMS, 0 means successful", default=0)
-    message_count: int = Field(alias="message-count",description="indicate the number of SMS created (for concatenated SMS)", default=1)
-    messages: List[Msg]
-
-class CallbackDLR(BaseModel):
-    msisdn: str
-    msgid: str
-    status: str
-    to: Optional[str]
-    timestamp: Optional[str]
-
-
-class InternalNewCampaign(BaseModel):
-    blast_list: List[str]
-    cpg_name: str
-    cpg_tpoa: str
-    cpg_xms: str
-    billing_id: int
-    webuser_id: int
-    product_id: int
-
-class BillingAccount(BaseModel):
-    billing_id: int
-    webuser_id: int
-    product_id: int
-
-class InternalSMS(BaseModel):
-    sender: str = Field(alias='from',description="SenderID", min_length=2, max_length=11, example="Example") 
-    to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
-                    min_length=10, max_length=20, example="96650403020")
-    content: str = Field(description="SMS content. it can include any unicode defined characters in UTF-8 format",
-                            example="Hello World!")
-    udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")
-
-    account: BillingAccount
     
 def is_empty(field):
     if field == '' or field == None:
@@ -99,10 +46,10 @@ async def home():
     return {'result': 'hello'}
 
 #@app.post('/sms', status_code=201)
-@app.post('/api/sms', response_model=SMSResponse, responses=mysms.example_create_sms_response)
+@app.post('/api/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
 async def post_sms(request: Request,
-                arg_sms: SMS = Body(
+                arg_sms: models.SMS = Body(
         ...,
         examples=mysms.example_create_sms,
     ),
@@ -229,7 +176,7 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
     return resp_json
 
 @app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
-async def callback_dlr(arg_dlr: CallbackDLR, request: Request):
+async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
     logger.info(f"{request.url.path}: from {request.client.host}")
     d_dlr = arg_dlr.dict()
     logger.info("### receive DLR")
@@ -272,7 +219,7 @@ async def callback_dlr(arg_dlr: CallbackDLR, request: Request):
 
 
 @app.post('/api/internal/cpg') #UI get uploaded file from user, call this API to process data, if data valid will create campaign
-async def create_campaign(arg_new_cpg: InternalNewCampaign, request: Request):
+async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request):
     # blast_list: List[str]
     # cpg_name: str
     # cpg_tpoa: str
@@ -323,9 +270,9 @@ async def create_campaign(arg_new_cpg: InternalNewCampaign, request: Request):
     return resp_json
 
 whitelist_ip = ['127.0.0.1','localhost']
-@app.post('/api/internal/sms', response_model=SMSResponse, responses=mysms.example_create_sms_response)
+@app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
-async def post_sms(arg_sms: InternalSMS, request:Request):
+async def post_sms(arg_sms: models.InternalSMS, request:Request):
     logger.info(f"{request.url.path}: from {request.client.host}")
     ### only allow whitelisted IP
     client_ip = request.client.host
@@ -443,4 +390,55 @@ async def post_sms(arg_sms: InternalSMS, request:Request):
     logger.info("### reply client:")
     logger.info(json.dumps(resp_json, indent=4))
  
+    return resp_json
+
+#from werkzeug.security import generate_password_hash,check_password_hash
+
+@app.post('/api/internal/login')
+async def verify_login(arg_login: models.InternalLogin, request:Request, response:Response):
+    # check if username exists
+    cur.execute("""select u.id as webuser_id,username,password_hash,email,bnumber,role_id,webrole.name as role_name,
+    billing_id,b.billing_type,b.company_name,b.company_address,b.country,b.city,b.postal_code,b.currency from webuser u
+        join billing_account b on u.billing_id=b.id join webrole on u.role_id=webrole.id where username=%s""", (arg_login.username,))
+    row = cur.fetchone()
+    if row:
+        (webuser_id,username,password_hash,email,bnumber,role_id,role_name,billing_id,billing_type,company_name,company_address,
+        country,city,postal_code,currency) = row
+        ##verify password
+        if arg_login.password_hash == password_hash:
+            resp_json = {
+                "errorcode":0,
+                "status":"Success",
+                "id":webuser_id,
+                "username":username,
+                "email":email,
+                "bnumber":bnumber,
+                "role_id":role_id,
+                "role":role_name,
+                "billing_id":billing_id,
+                "billing_type":billing_type,
+                "company_name":company_name,
+                "company_address":company_address,
+                "country":country,
+                "city":city,
+                "postal_code":postal_code,
+                "currency":currency
+            }
+        else:
+            resp_json = {
+                'errorcode': 1,
+                'status': "wrong password!"
+            }
+            response.status_code = 401
+
+    else:
+        resp_json = {
+            'errorcode': 1,
+            'status': "webuser not found!"
+        }
+        response.status_code = 401
+
+    logger.info("### reply internal UI:")
+    logger.info(json.dumps(resp_json, indent=4))
+
     return resp_json
