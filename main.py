@@ -269,7 +269,7 @@ async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Requ
  
     return resp_json
 
-whitelist_ip = ['127.0.0.1','localhost']
+whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
 @app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
 async def post_sms(arg_sms: models.InternalSMS, request:Request):
