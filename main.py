@@ -4,6 +4,7 @@
 
 from subprocess import call
 from fastapi import FastAPI, Body, Response, HTTPException, Depends, Request
+from fastapi.responses import JSONResponse
 
 import re
 import smsutil
@@ -449,7 +450,10 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 
     return resp_json
 
-@app.get('/api/internal/application/<billing_id>') #get all api_credentials for a billing account
+# use responses to add additional response like returning errors
+@app.get("/api/internal/application/{billing_id}", response_model=models.AppResponse,
+        responses = {404: {"model": models.MsgNotFound}}
+) #get all api_credentials for a billing account
 def get_app(billing_id: int, response:Response):
     cur.execute(f"""select a.id, api_key,api_secret,webuser_id,product_id,product.name as product_name,a.live,callback_url,
     friendly_name from api_credential a join product on product.id=a.product_id where a.billing_id=%s and a.deleted=0;
@@ -483,8 +487,8 @@ def get_app(billing_id: int, response:Response):
     else:
         resp_json = {
             "errorcode": 1,
-            "status":"Not found!"
+            "status":"App Not found!"
         }
-        response.status_code = 404
+        return JSONResponse(status_code=404, content=resp_json)
     
     return resp_json

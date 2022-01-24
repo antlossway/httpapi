@@ -60,3 +60,23 @@ class InternalSMS(BaseModel):
 class InternalLogin(BaseModel):
     username: str = Field(description="username",example="admin")
     password: str = Field(description="password", example="abcd")
+
+class Application(BaseModel):
+    id: int
+    friendly_name: str = Field(example="premium route for OTP")
+    api_key: str = Field(example="abcdefghijk")
+    api_secret: str = Field(example="32y41h41ojhhriugr3gr")
+    callback_url: str = Field(example="http://example.com/callback")
+    live: int = Field(description="indicate result validity of application, 1:valid, 0:not valid", default=1)
+    product_id: int = Field(example=1)
+    product: str = Field(description="name of product", example="Premium SMS")
+    webuser_id: int = Field(example=1)
+
+class AppResponse(BaseModel):
+    errorcode: int=0
+    status: str="Success"
+    results: List[Application]
+
+class MsgNotFound(BaseModel):
+    errorcode: int=1
+    status: str = Field(default="Not found!")
