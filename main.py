@@ -2,6 +2,7 @@
 #from typing import Optional,List
 #from pydantic import BaseModel, Field
 
+from subprocess import call
 from fastapi import FastAPI, Body, Response, HTTPException, Depends, Request
 
 import re
@@ -219,7 +220,9 @@ async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
 
 
 @app.post('/api/internal/cpg') #UI get uploaded file from user, call this API to process data, if data valid will create campaign
-async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request, auth_result = Depends(myauth.allowinternal)):
+#async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request, auth_result=Depends(myauth.allowinternal)):
+async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request):
+
     # blast_list: List[str]
     # cpg_name: str
     # cpg_tpoa: str
@@ -272,12 +275,12 @@ async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Requ
 whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
 @app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
-async def post_sms(arg_sms: models.InternalSMS, request:Request):
+async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Depends(myauth.allowinternal)):
     logger.info(f"{request.url.path}: from {request.client.host}")
-    ### only allow whitelisted IP
-    client_ip = request.client.host
-    if not request.client.host in whitelist_ip:
-        raise HTTPException(status_code=401, detail=f"unauthorized access")
+    ### only allow whitelisted IP => move to myauth.allowinternal
+    # client_ip = request.client.host
+    # if not request.client.host in whitelist_ip:
+    #     raise HTTPException(status_code=401, detail=f"unauthorized access")
         
     d_sms = arg_sms.dict()
     logger.info(f"debug post body")
@@ -392,21 +395,23 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request):
  
     return resp_json
 
-#from werkzeug.security import generate_password_hash,check_password_hash
+from werkzeug.security import generate_password_hash,check_password_hash
 
 @app.post('/api/internal/login') #check webuser where deleted=0
 async def verify_login(arg_login: models.InternalLogin, request:Request, response:Response):
+#async def verify_login(arg_login: models.InternalLogin, request:Request, response:Response, auth_result=Depends(myauth.allowinternal)):
     # check if username exists
     cur.execute("""select u.id as webuser_id,username,password_hash,email,bnumber,role_id,webrole.name as role_name,
     billing_id,b.billing_type,b.company_name,b.company_address,b.country,b.city,b.postal_code,b.currency from webuser u
-        join billing_account b on u.billing_id=b.id join webrole on u.role_id=webrole.id where username=%s and delete=0
+        join billing_account b on u.billing_id=b.id join webrole on u.role_id=webrole.id where username=%s and deleted=0
         """, (arg_login.username,))
     row = cur.fetchone()
     if row:
         (webuser_id,username,password_hash,email,bnumber,role_id,role_name,billing_id,billing_type,company_name,company_address,
         country,city,postal_code,currency) = row
         ##verify password
-        if arg_login.password_hash == password_hash:
+        #if arg_login.password_hash == password_hash:
+        if check_password_hash(password_hash,arg_login.password):
             resp_json = {
                 "errorcode":0,
                 "status":"Success",
@@ -428,18 +433,58 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
         else:
             resp_json = {
                 'errorcode': 1,
-                'status': "wrong password!"
+                'status': "Wrong password!"
             }
             response.status_code = 401
 
     else:
         resp_json = {
             'errorcode': 1,
-            'status': "webuser not found!"
+            'status': "User not found!"
         }
         response.status_code = 401
 
     logger.info("### reply internal UI:")
     logger.info(json.dumps(resp_json, indent=4))
 
+    return resp_json
+
+@app.get('/api/internal/application/<billing_id>') #get all api_credentials for a billing account
+def get_app(billing_id: int, response:Response):
+    cur.execute(f"""select a.id, api_key,api_secret,webuser_id,product_id,product.name as product_name,a.live,callback_url,
+    friendly_name from api_credential a join product on product.id=a.product_id where a.billing_id=%s and a.deleted=0;
+    """, (billing_id,))
+
+    l_data = list() #list of dict
+    rows = cur.fetchall()
+    for row in rows:
+        (api_id,api_key,api_secret,webuser_id,product_id,product_name,live,callback_url,friendly_name) = row
+        d = {
+            "id": api_id,
+            "friendly_name": friendly_name,
+            "api_key": api_key,
+            "api_secret": api_secret,
+            "callback_url": callback_url,
+            "live": live,
+            "product_id": product_id,
+            "product": product_name,
+            "webuser_id": webuser_id
+        }
+        l_data.append(d)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Not found!"
+        }
+        response.status_code = 404
+    
     return resp_json

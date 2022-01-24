@@ -114,6 +114,8 @@ async def authenticate(basic_result=Depends(myauth_basic), jwt_result=Depends(my
             return jwt_result
 
 whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
+#whitelist_ip = ['13.214.145.167']
+
 async def allowinternal(request: Request):
     client_ip = request.client.host
     if not request.client.host in whitelist_ip:

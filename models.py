@@ -58,5 +58,5 @@ class InternalSMS(BaseModel):
     account: BillingAccount
 
 class InternalLogin(BaseModel):
-    username: str = Field(description="username",example="cmi_admin")
-    password_hash: str = Field(description="hashed password", example="abcd")
+    username: str = Field(description="username",example="admin")
+    password: str = Field(description="password", example="abcd")
