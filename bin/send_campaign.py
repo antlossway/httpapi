@@ -135,12 +135,13 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
             xms = re.sub(pattern, value, xms)
         except Exception as err:
             logger.warning(f"!!! {err}")
-    print(f"final SMS content: {xms}")
+    logger.info(f"final SMS content: {xms}")
 
     data = {
         "from": sender,
         "to": bnumber,
         "content": xms,
+        "cpg_id": d_ac.get("cpg_id"),
         "account": {
             "billing_id": d_ac.get("billing_id"),
             "webuser_id": d_ac.get("webuser_id"),
@@ -204,7 +205,8 @@ def main():
                 'webuser_id': webuser_id,
                 'product_id': product_id,
                 'sender':sender,
-                'xms': xms
+                'xms': xms,
+                'cpg_id': cpg_id
             }
        
             cur.execute(f"update cpg set status = 'SENDING' where id = {cpg_id}")

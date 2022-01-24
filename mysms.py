@@ -196,6 +196,19 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     #     "product_name": product_name,
     #     }
 
+    #     data = {
+    #     "msgid": msgid,
+    #     "sender": sender,
+    #     "to": msisdn,
+    #     "content": xms,
+    #     "require_dlr": require_dlr,
+    #     "country_id": country_id,
+    #     "operator_id": operator_id,
+    #     "udh": udh,
+    #     "dcs": dcs,
+    #     "cpg_id": cpg_id #send_campaign.py will call api/internal/sms
+    # }
+
     logger.info(f"debug: account {ac}")
     webuser_id = ac.get('webuser_id')
     billing_id = ac.get('billing_id')
@@ -209,7 +222,12 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     country_id = data.get('country_id')
     operator_id = data.get('operator_id')
     udh = data.get('udh','')
+    cpg_id = data.get('cpg_id',0)
+    dcs = data.get('dcs',0)
     msgid2 = ''
+
+    sender = re.sub(r"'",r"''",sender)
+    xms = re.sub(r"'",r"''",xms)
 
     if provider.startswith("AMEEX"):
         create_error, msgid2 = create_sms_ameex(ac,data,provider)
@@ -218,7 +236,15 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
 
     if create_error == 0 and msgid2 != None and msgid2 != '': #SMS successfully submitted to provider
         #record into redis cdr_cache
-        sql = f"insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,dcs,len,udh,xms) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',{country_id},{operator_id},0,{len(xms)},'{udh}','{xms}');"
+        if cpg_id != 0:
+            sql = f"""insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,
+            dcs,len,udh,xms,cpg_id) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
+            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',{cpg_id});"""
+        else:
+            sql = f"""insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,
+            dcs,len,udh,xms) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
+            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}');"""
+
         logger.info(sql)
         if mydb.r.lpush('cdr_cache',sql): #successful transaction return True
             logger.info(f"LPUSH cdr_cache OK")

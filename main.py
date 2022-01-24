@@ -1,8 +1,9 @@
 #from textwrap import indent
 #from typing import Optional,List
 #from pydantic import BaseModel, Field
+#from subprocess import call
 
-from subprocess import call
+from textwrap import indent
 from fastapi import FastAPI, Body, Response, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -11,6 +12,7 @@ import smsutil
 import random
 from uuid import uuid4
 import json
+from email_validator import validate_email
 
 #import myutils
 from myutils import logger, read_comma_sep_lines, gen_udh_base, gen_udh
@@ -52,9 +54,9 @@ async def home():
 #async def post_sms(response: Response,
 async def post_sms(request: Request,
                 arg_sms: models.SMS = Body(
-        ...,
-        examples=mysms.example_create_sms,
-    ),
+                    ...,
+                    examples=mysms.example_create_sms,
+                ),
 #account: str = Depends(myauth.myauth_basic) 
 account=Depends(myauth.authenticate) # multiple authentication methods, account is dict including many info
 ):
@@ -73,34 +75,41 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
 
     ### missing parameters
     if is_empty(sender) or is_empty(msisdn) or is_empty(content):
-        # result = {
-        #     "errorcode": 2,
-        #     "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
-        # }
-        raise HTTPException(status_code=422, detail=f"missing parameter, please check if you forget 'from','to',or 'content'")
+        resp_json = {
+            "errorcode": 2,
+            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
+         }
+        return JSONResponse(status_code=422, content=resp_json)
 
     ### msisdn format wrong
     msisdn = mysms.clean_msisdn(msisdn)
     if not msisdn:
-        raise HTTPException(status_code=422, detail=f"B-number {msisdn} is invalid")
+        resp_json = {
+            "errorcode": 2,
+            "errormsg": f"B-number {msisdn} is invalid"
+        }
+        #raise HTTPException(status_code=422, detail=f"B-number {msisdn} is invalid")
+        return JSONResponse(status_code=422, content=resp_json)
     
     ### sender format wrong
     len_sender = len(sender)
     if len_sender > max_len_tpoa:
-        # result = {
-        #     "errorcode": 4,
-        #     "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
-        # }
-        # response.status_code = 422
-
-        raise HTTPException(status_code=422, detail=f"TPOA/Sender length should not be more than {max_len_tpoa} characters")
+        resp_json = {
+            "errorcode": 4,
+            "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
 
     ### check B-number country/operator ###
     parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
     if parse_result:
         country_id,operator_id = parse_result.split('---')
     else:
-        raise HTTPException(status_code=422, detail=f"Receipient number does not belong to any network")
+        resp_json = {
+            "errorcode": 5,
+            "errormsg": f"Receipient number {msisdn} does not belong to any network"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
 
     ### optional param
     #base64 = d_sms.get("base64url",0)
@@ -126,7 +135,7 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
 
     if split > 1:
         udh_base = gen_udh_base()
-        print(f"debug udh_base {udh_base}")
+        logger.debug(f"gen_udh_base: {udh_base}")
 
     l_resp_msg = list() #list of dict
 
@@ -144,7 +153,7 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
         #for long sms, our UDH will override orig UDH from client
         if udh_base != '':
             udh = gen_udh(udh_base,split,i+1)
-            print(f"debug udh: {udh}")
+            logger.debug(f"gen_udh: {udh}")
 
         #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
         
@@ -164,7 +173,13 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
         if errorcode == 0:
             pass
         else: #no need to process remain parts
-            raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
+            resp_json = {
+                "errorcode": 6,
+                "errormsg": "Internal Server Error, please contact support"
+            }
+            #raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
+            return JSONResponse(status_code=422, content=resp_json)
+
             break
 
     resp_json = {
@@ -175,7 +190,9 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
     logger.info("### reply client:")
     logger.info(json.dumps(resp_json, indent=4))
  
-    return resp_json
+    #return resp_json
+    return JSONResponse(status_code=200, content=resp_json)
+
 
 @app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
 async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
@@ -222,7 +239,13 @@ async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
 
 @app.post('/api/internal/cpg') #UI get uploaded file from user, call this API to process data, if data valid will create campaign
 #async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request, auth_result=Depends(myauth.allowinternal)):
-async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request):
+async def create_campaign(
+    request: Request,
+    arg_new_cpg: models.InternalNewCampaign = Body(
+                     ...,
+                     examples=models.example_internal_cpg,
+    ),
+):
 
     # blast_list: List[str]
     # cpg_name: str
@@ -246,9 +269,13 @@ async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Requ
         billing_id = arg_new_cpg.billing_id
         webuser_id = arg_new_cpg.webuser_id
         product_id = arg_new_cpg.product_id
+        cpg_name = re.sub(r"'",r"''",cpg_name)
+        tpoa = re.sub(r"'",r"''",tpoa)
+        xms = re.sub(r"'",r"''",xms)
+
         sql = f"""insert into cpg (name,tpoa,billing_id,webuser_id,product_id,xms) values 
                 ('{cpg_name}','{tpoa}',{billing_id},{webuser_id},{product_id},'{xms}') returning id;"""
-        print(sql)
+        logger.debug(sql)
         cur.execute(sql)
         cpg_id = cur.fetchone()[0]
 
@@ -258,11 +285,11 @@ async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Requ
                 del d['hash'] #delete 'hash' from the dict
                 for k,v in d.items():
                     sql = f"""insert into cpg_blast_list (cpg_id,field_name,value,hash) values ({cpg_id}, '{k}','{v}','{hash_value}');"""
-                    print(sql)
+                    logger.debug(sql)
                     try:
                         cur.execute(sql)
                     except Exception as err:
-                        print(f"!!! insertion error {err}")
+                        logger.debug(f"!!! insertion error {err}")
         resp_json = {
             'cpg_id': cpg_id,
             'count_valid_entry': len(l_data)
@@ -271,7 +298,8 @@ async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Requ
     logger.info("### reply UI:")
     logger.info(json.dumps(resp_json, indent=4))
  
-    return resp_json
+    return JSONResponse(status_code=200, content=resp_json)
+
 
 whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
 @app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
@@ -290,39 +318,46 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Dep
     sender = arg_sms.sender #client may sent "from", which is alias as "sender"
     msisdn = arg_sms.to
     content = arg_sms.content
+    cpg_id = arg_sms.cpg_id
 
     result = {}
 
     ### missing parameters
     if is_empty(sender) or is_empty(msisdn) or is_empty(content):
-        # result = {
-        #     "errorcode": 2,
-        #     "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
-        # }
-        raise HTTPException(status_code=422, detail=f"missing parameter, please check if you forget 'from','to',or 'content'")
+        resp_json = {
+            "errorcode": 2,
+            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
 
     ### msisdn format wrong
     msisdn = mysms.clean_msisdn(msisdn)
     if not msisdn:
-        raise HTTPException(status_code=422, detail=f"B-number {msisdn} is invalid")
+        resp_json = {
+            "errorcode": 2,
+            "errormsg": f"B-number {msisdn} is invalid"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
     
     ### sender format wrong
     len_sender = len(sender)
     if len_sender > max_len_tpoa:
-        # result = {
-        #     "errorcode": 4,
-        #     "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
-        # }
-        # response.status_code = 422
-
-        raise HTTPException(status_code=422, detail=f"TPOA/Sender length should not be more than {max_len_tpoa} characters")
+        resp_json= {
+            "errorcode": 4,
+            "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
 
     ### check B-number country/operator ###
     parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
     if parse_result:
         country_id,operator_id = parse_result.split('---')
     else:
-        raise HTTPException(status_code=422, detail=f"Receipient number does not belong to any network")
+        resp_json = {
+            "errorcode": 5,
+            "errormsg": f"Receipient number {msisdn} does not belong to any network"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
 
     ### optional param
     require_dlr = 0 # internal call don't need to return DLR
@@ -343,7 +378,7 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Dep
 
     if split > 1:
         udh_base = gen_udh_base()
-        print(f"debug udh_base {udh_base}")
+        logger.debug(f"gen_udh_base: {udh_base}")
 
     l_resp_msg = list() #list of dict
 
@@ -361,7 +396,7 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Dep
         #for long sms, our UDH will override orig UDH from client
         if udh_base != '':
             udh = gen_udh(udh_base,split,i+1)
-            print(f"debug udh: {udh}")
+            logger.debug(f"gen_udh: {udh}")
 
         #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
         
@@ -373,7 +408,9 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Dep
             "require_dlr": require_dlr,
             "country_id": country_id,
             "operator_id": operator_id,
-            "udh": udh
+            "udh": udh,
+            "dcs": dcs,
+            "cpg_id": cpg_id
         }
         
         account = arg_sms.account.dict()
@@ -383,7 +420,12 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Dep
         if errorcode == 0:
             pass
         else: #no need to process remain parts
-            raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
+            resp_json = {
+                "errorcode": 6,
+                "errormsg": "Internal Server Error, please contact support"
+            }
+            return JSONResponse(status_code=422, content=resp_json)
+
             break
 
     resp_json = {
@@ -394,7 +436,8 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Dep
     logger.info("### reply client:")
     logger.info(json.dumps(resp_json, indent=4))
  
-    return resp_json
+    return JSONResponse(status_code=200, content=resp_json)
+
 
 from werkzeug.security import generate_password_hash,check_password_hash
 
@@ -404,7 +447,7 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
     # check if username exists
     cur.execute("""select u.id as webuser_id,username,password_hash,email,bnumber,role_id,webrole.name as role_name,
     billing_id,b.billing_type,b.company_name,b.company_address,b.country,b.city,b.postal_code,b.currency from webuser u
-        join billing_account b on u.billing_id=b.id join webrole on u.role_id=webrole.id where username=%s and deleted=0
+        left join billing_account b on u.billing_id=b.id left join webrole on u.role_id=webrole.id where username=%s and deleted=0
         """, (arg_login.username,))
     row = cur.fetchone()
     if row:
@@ -448,11 +491,12 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
     logger.info("### reply internal UI:")
     logger.info(json.dumps(resp_json, indent=4))
 
-    return resp_json
+    return JSONResponse(status_code=200, content=resp_json)
+
 
 # use responses to add additional response like returning errors
 @app.get("/api/internal/application/{billing_id}", response_model=models.AppResponse,
-        responses = {404: {"model": models.MsgNotFound}}
+        responses={404: {"model": models.MsgNotFound}}
 ) #get all api_credentials for a billing account
 def get_app(billing_id: int, response:Response):
     cur.execute(f"""select a.id, api_key,api_secret,webuser_id,product_id,product.name as product_name,a.live,callback_url,
@@ -491,4 +535,325 @@ def get_app(billing_id: int, response:Response):
         }
         return JSONResponse(status_code=404, content=resp_json)
     
-    return resp_json
+    return JSONResponse(status_code=200, content=resp_json)
+    
+def get_userid_from_username(username):
+    cur.execute("select id from webuser where username=%s",(username,))
+    try:
+        webuser_id = cur.fetchone()[0]
+        return webuser_id
+    except:
+        return None
+
+def get_userid_from_email(email):
+    cur.execute("select id from webuser where email=%s",(email,))
+    try:
+        webuser_id = cur.fetchone()[0]
+        return webuser_id
+    except:
+        return None
+
+@app.post("/api/internal/insert", 
+#response_model=models.InsertResponse, 
+            responses={404: {"errorcode": 1, "status": "some error msg"} }
+)
+async def insert_record(
+    args: models.InternalInsert = Body(
+                     ...,
+                     examples=models.example_internal_insert,
+    ),
+    #request: Request
+):
+    d_args = args.dict()
+    logger.debug(f"### orig internal insert request body: {json.dumps(d_args, indent=4)}")
+
+    if not 'table' in d_args:
+        resp_json = {
+            "errorcode":2,
+            "status": f"missing compulsory field table"
+        }
+        return JSONResponse(status_code=500,content=resp_json)
+
+    table = d_args['table']
+    #del d_args['table']
+
+    if table == 'billing_account':
+        #company_name and contact name is compulsory
+        try:
+            data_obj = models.InsertBillingAccount(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field company_name or contact-name"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+        
+        # if billing_email is provided, check if email is valid, comma seprated email
+        if data_obj.billing_email: #email not null
+            emails = data_obj.billing_email.split(',')
+            for email in emails:
+                try:
+                    valid = validate_email(email) # return a email object
+                except:
+                    resp_json = {
+                        "errorcode":1,
+                        "status": f"Incorrect email address {email}"
+                    }
+                    return JSONResponse(status_code=422,content=resp_json)
+                    break
+    
+    elif table == 'api_credential':
+            ## compulsory field
+            # api_key: str
+            # api_secret: str
+            # webuser_id: int
+            # product_id: int
+            # billing_id: int
+        try:
+            data_obj = models.InsertAPICredential(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+
+    elif table == 'webuser': 
+            ## compulsory field
+            # username: str
+            # ## optional field
+            # password_hash: Optional[str]
+            # email: Optional[int]
+            # billing_id: Optional[int]
+            # role_id: Optional[int]
+            # bnumber: Optional[str]     
+        try:
+            data_obj = models.InsertWebUser(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+        ### username and email should be unique
+        username = data_obj.username
+        email = data_obj.email
+        if username and get_userid_from_username(username):
+            resp_json = {
+                "errorcode":2,
+                "status": f"username {username} exists"
+            }
+            return JSONResponse(status_code=403,content=resp_json)
+        elif email and get_userid_from_email(email):
+            resp_json = {
+                "errorcode":2,
+                "status": f"email {email} exists"
+            }
+            return JSONResponse(status_code=403,content=resp_json)
+
+    #### general processing for any table
+    d_data = data_obj.dict()
+    
+    data = dict() #hold the fields to be inserted into destination table
+    
+    fields,values = '', ''
+    for k,v in d_data.items():
+        if not v is None:
+            data[k] = v
+            fields += f"{k},"
+            if isinstance(v, (int, float)): #is a number
+                values += f"{v},"
+            else:
+                v = re.sub(r"'", "''",v) ##replace single quote ' with ''
+                values += f"'{v}',"
+
+    logger.debug(f"### after formatting and removing null value: {json.dumps(data,indent=4)}")
+
+    fields = fields[:-1]
+    values = values[:-1]
+
+    sql = f"insert into {table} ({fields}) values ({values}) returning id;"
+    logger.debug(sql)
+    ### insert into table
+    try:
+        # new_id = cur.execute("""insert into billing_account (company_name,contact_name,billing_type,company_address,country,
+        # city,postal_code,billing_email) values (%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
+        # (data['company_name'],data['contact_name'],data['billing_type'],data['company_address'],data['country'],data['city'],data['postal_code'],data['billing_email'])
+        # )
+        new_id = cur.execute(sql)
+        try: 
+            new_id = cur.fetchone()[0]
+            if new_id:
+                resp_json = {
+                    "errorcode":0,
+                    "status": "Success",
+                    "id": new_id
+                }
+        except Exception as err:
+            resp_json = {
+                "errorcode":2,
+                "status": f"insert {table} failure, no new id returned: {err}"
+            }
+            logger.info(f"reply internal insert: {json.dumps(resp_json,indent=4)}")
+            return JSONResponse(status_code=500, content=resp_json)
+
+    except Exception as err:
+        resp_json = {
+            "errorcode":2,
+            "status": f"insert {table} failure: {err}"
+        }
+        logger.info(f"reply internal insert: {json.dumps(resp_json,indent=4)}")
+
+        #raise HTTPException(status_code=500, detail={"errocode": 2, "status": f"insert DB error: {err}"})
+        return JSONResponse(status_code=500, content=resp_json)      
+    
+    return JSONResponse(status_code=200,content=resp_json)
+
+
+
+@app.post("/api/internal/update", 
+#response_model=models.InsertResponse, 
+            responses={404: {"errorcode": 1, "status": "some error msg"} }
+)
+async def update_record(
+    args: models.InternalUpdate = Body(
+                     ...,
+                     examples=models.example_internal_update,
+    ),
+    #request: Request
+):
+    d_args = args.dict()
+    logger.debug(f"### orig internal update request body: {json.dumps(d_args, indent=4)}")
+
+    if not 'table' in d_args or not 'id' in d_args:
+        resp_json = {
+            "errorcode":2,
+            "status": f"missing compulsory field table or id"
+        }
+        return JSONResponse(status_code=500,content=resp_json)
+
+    table = d_args['table']
+    id = d_args['id']
+
+    if table == 'billing_account':
+        try:
+            data_obj = models.UpdateBillingAccount(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+        
+        # if billing_email is provided, check if email is valid, comma seprated email
+        if data_obj.billing_email: #email not null
+            emails = data_obj.billing_email.split(',')
+            for email in emails:
+                try:
+                    valid = validate_email(email) # return a email object
+                except:
+                    resp_json = {
+                        "errorcode":1,
+                        "status": f"Incorrect email address {email}"
+                    }
+                    return JSONResponse(status_code=422,content=resp_json)
+                    break
+    
+    elif table == 'api_credential':
+        try:
+            data_obj = models.UpdateAPICredential(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+
+    elif table == 'webuser': 
+        try:
+            data_obj = models.UpdateWebUser(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+        ### username and email should be unique
+        username = data_obj.username
+        email = data_obj.email
+        existing_id_username = get_userid_from_username(username)
+        existing_id_email = get_userid_from_username(email)
+        if username and existing_id_username and existing_id_username != id:
+            resp_json = {
+                "errorcode":2,
+                "status": f"username {username} exists"
+            }
+            return JSONResponse(status_code=403,content=resp_json)
+        elif email and existing_id_email and existing_id_email != id:
+            resp_json = {
+                "errorcode":2,
+                "status": f"email {email} exists"
+            }
+            return JSONResponse(status_code=403,content=resp_json)
+
+
+    #### general processing for any table
+    d_data = data_obj.dict()
+    
+    data = dict() #hold the fields to be updated to destination table
+    
+    set_cmd = ''
+    for k,v in d_data.items():
+        if not v is None:
+            data[k] = v
+            if isinstance(v, (int, float)): #is a number
+                set_cmd += f"{k}={v},"
+            else:
+                v = re.sub(r"'", "''",v) ##replace single quote ' with ''
+                set_cmd += f"{k}='{v}',"
+
+    logger.debug(f"### after formatting and removing null: {json.dumps(data,indent=4)}")
+
+    set_cmd = set_cmd[:-1] #remove ending ,
+
+    sql = f"update {table} set {set_cmd},update_time=current_timestamp where id={id} returning id;"
+    logger.debug(sql)
+    ### insert into table
+    try:
+        new_id = cur.execute(sql)
+        try: 
+            new_id = cur.fetchone()[0]
+            if new_id:
+                resp_json = {
+                    "errorcode":0,
+                    "status": "Success",
+                    "id": new_id
+                }
+                logger.debug(f"### reply internal update: {json.dumps(resp_json,indent=4)}")
+
+        except Exception as err:
+            resp_json = {
+                "errorcode":2,
+                "status": f"update {table} failed, no id returned: {err}"
+            }
+            logger.info(f"reply internal update: {json.dumps(resp_json,indent=4)}")
+            return JSONResponse(status_code=500, content=resp_json)
+
+    except Exception as err:
+        resp_json = {
+            "errorcode":2,
+            "status": f"update {table} failed: {err}"
+        }
+        logger.info(f"reply internal update: {json.dumps(resp_json,indent=4)}")
+        return JSONResponse(status_code=500, content=resp_json)      
+    
+    return JSONResponse(status_code=200,content=resp_json)
+
+@app.post("/api/internal/password_hash")
+async def get_password_hash(args: models.PasswordHashRequest):
+    password_hash = generate_password_hash(args.password)
+    resp_json = {
+        "password": args.password,
+        "password_hash": password_hash
+    }
+    return JSONResponse(content=resp_json)
