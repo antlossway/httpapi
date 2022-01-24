@@ -1,7 +1,7 @@
 """
 https://stackoverflow.com/questions/64731890/fastapi-supporting-multiple-authentication-dependencies
 """
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Request
 from fastapi.security import HTTPBasic,HTTPBasicCredentials
 import secrets
 import hashlib
@@ -113,3 +113,8 @@ async def authenticate(basic_result=Depends(myauth_basic), jwt_result=Depends(my
         else:
             return jwt_result
 
+whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
+async def allowinternal(request: Request):
+    client_ip = request.client.host
+    if not request.client.host in whitelist_ip:
+        raise HTTPException(status_code=401, detail=f"unauthorized access")

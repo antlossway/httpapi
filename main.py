@@ -219,7 +219,7 @@ async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
 
 
 @app.post('/api/internal/cpg') #UI get uploaded file from user, call this API to process data, if data valid will create campaign
-async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request):
+async def create_campaign(arg_new_cpg: models.InternalNewCampaign, request: Request, auth_result = Depends(myauth.allowinternal)):
     # blast_list: List[str]
     # cpg_name: str
     # cpg_tpoa: str
@@ -394,12 +394,13 @@ async def post_sms(arg_sms: models.InternalSMS, request:Request):
 
 #from werkzeug.security import generate_password_hash,check_password_hash
 
-@app.post('/api/internal/login')
+@app.post('/api/internal/login') #check webuser where deleted=0
 async def verify_login(arg_login: models.InternalLogin, request:Request, response:Response):
     # check if username exists
     cur.execute("""select u.id as webuser_id,username,password_hash,email,bnumber,role_id,webrole.name as role_name,
     billing_id,b.billing_type,b.company_name,b.company_address,b.country,b.city,b.postal_code,b.currency from webuser u
-        join billing_account b on u.billing_id=b.id join webrole on u.role_id=webrole.id where username=%s""", (arg_login.username,))
+        join billing_account b on u.billing_id=b.id join webrole on u.role_id=webrole.id where username=%s and delete=0
+        """, (arg_login.username,))
     row = cur.fetchone()
     if row:
         (webuser_id,username,password_hash,email,bnumber,role_id,role_name,billing_id,billing_type,company_name,company_address,
