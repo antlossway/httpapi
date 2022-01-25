@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional,List
+from datetime import datetime
 
 
 class SMS(BaseModel): 
@@ -72,11 +73,39 @@ class Application(BaseModel):
     product_id: int = Field(example=1)
     product: str = Field(description="name of product", example="Premium SMS")
     webuser_id: int = Field(example=1)
+    description: str = Field(example="describe api_credential")
+
 
 class AppResponse(BaseModel):
     errorcode: int=0
     status: str="Success"
     results: List[Application]
+
+class GetWebUser(BaseModel):
+    id: int
+    username: str
+    #password_hash: Optional[str]
+    email: Optional[str]
+    bnumber: Optional[str]
+    role_id: Optional[int]
+    role_name: Optional[str]
+    live: Optional[int]
+
+class GetUsersResponse(BaseModel):
+    errorcode: int=0
+    status: str="Success"
+    results: List[GetWebUser]
+
+class GetAudit(BaseModel):
+    #timestamp: datetime #error: Object of type datetime is not JSON serializable
+    timestamp: str
+    username: str
+    auditlog: str
+
+class GetAuditResponse(BaseModel):
+    errorcode: int=0
+    status: str="Success"
+    results: List[GetAudit]
 
 class MsgNotFound(BaseModel):
     errorcode: int=1
@@ -98,19 +127,23 @@ class InternalInsert(BaseModel): #add all possible field here, depends on differ
     ### for api_credential
     api_key: Optional[str]
     api_secret: Optional[str]
-    webuser_id: Optional[int]
     product_id: Optional[int]
     callback_url: Optional[str]
     friendly_name: Optional[str]
+    description: Optional[str]
+
     ### for webuser
-    username: str
+    username: Optional[str]
     ## optional field
     password_hash: Optional[str]
     email: Optional[str]
     role_id: Optional[int]
     bnumber: Optional[str]
+    ### for audit
+    auditlog: Optional[str]
     ### common
-    billing_id: Optional[int] #webuser, api_credential
+    billing_id: Optional[int] #webuser, api_credential, audit
+    webuser_id: Optional[int] #api_credential, audit
 
 class InsertBillingAccount(BaseModel):
     ## compulsory field
@@ -135,6 +168,8 @@ class InsertAPICredential(BaseModel):
     ## optional field
     callback_url: Optional[str]
     friendly_name: Optional[str]
+    description: Optional[str]
+
 
 class InsertWebUser(BaseModel):
     ## compulsory field
@@ -145,6 +180,12 @@ class InsertWebUser(BaseModel):
     billing_id: Optional[int]
     role_id: Optional[int]
     bnumber: Optional[str]
+
+class InsertAudit(BaseModel):
+    ### for audit
+    billing_id: int
+    webuser_id: int
+    auditlog: str
 
 example_internal_insert={
     "billing_account": {
@@ -173,6 +214,7 @@ example_internal_insert={
             "callback_url": "http://example.com/callback",
             "friendly_name": "Premium route for OTP",
             "billing_id": 1001,
+            "description": "some text"
         },
     },
     "webuser": {
@@ -187,6 +229,15 @@ example_internal_insert={
             "bnumber": "+6511223344"
         },
     },
+    "audit": {
+        "summary": "insert into audit",
+        "value":{
+            "table": "audit",
+            "billing_id": 1001,
+            "webuser_id": 1001,
+            "auditlog": "access report"
+        },
+    }
 
 }
 
@@ -211,6 +262,7 @@ class InternalUpdate(BaseModel): #add all possible field here, depends on differ
     product_id: Optional[int]
     callback_url: Optional[str]
     friendly_name: Optional[str]
+    description: Optional[str]
     ### for webuser
     username: Optional[str]
     password_hash: Optional[str]
@@ -220,6 +272,7 @@ class InternalUpdate(BaseModel): #add all possible field here, depends on differ
     ### common field
     billing_id: Optional[int] # in table webuser and api_credential
     deleted: Optional[int] # in table webuser and api_credential
+    live: Optional[int] # in table api_credential, webuser
     
 example_internal_update={
     "billing_account": {
@@ -250,7 +303,9 @@ example_internal_update={
             "callback_url": "http://example.com/callback",
             "friendly_name": "Premium route for OTP",
             "billing_id": 1001,
-            "deleted": 0
+            "deleted": 0,
+            "live": 0,
+            "description": "some text"
         },
     },
     "webuser": {
@@ -263,7 +318,8 @@ example_internal_update={
             "email": "bob@example.com",
             "billing_id": 1001,
             "role_id": 3,
-            "deleted": 0
+            "deleted": 0,
+            "live": 0
         },
     },
 }
@@ -288,6 +344,9 @@ class UpdateAPICredential(BaseModel):
     callback_url: Optional[str]
     friendly_name: Optional[str]
     deleted: Optional[int]
+    live: Optional[int]
+    description: Optional[str]
+
 
 class UpdateWebUser(BaseModel):
     username: Optional[str]
@@ -297,6 +356,8 @@ class UpdateWebUser(BaseModel):
     role_id: Optional[int]
     bnumber: Optional[str]
     deleted: Optional[int]
+    live: Optional[int]
+
 
 class PasswordHashRequest(BaseModel):
     password: str = Field(example="combination of letter,number and special characters")

@@ -498,15 +498,15 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 @app.get("/api/internal/application/{billing_id}", response_model=models.AppResponse,
         responses={404: {"model": models.MsgNotFound}}
 ) #get all api_credentials for a billing account
-def get_app(billing_id: int, response:Response):
+def get_app_by_billing_id(billing_id: int, response:Response):
     cur.execute(f"""select a.id, api_key,api_secret,webuser_id,product_id,product.name as product_name,a.live,callback_url,
-    friendly_name from api_credential a join product on product.id=a.product_id where a.billing_id=%s and a.deleted=0;
+    friendly_name, a.description from api_credential a join product on product.id=a.product_id where a.billing_id=%s and a.deleted=0;
     """, (billing_id,))
 
     l_data = list() #list of dict
     rows = cur.fetchall()
     for row in rows:
-        (api_id,api_key,api_secret,webuser_id,product_id,product_name,live,callback_url,friendly_name) = row
+        (api_id,api_key,api_secret,webuser_id,product_id,product_name,live,callback_url,friendly_name, desc) = row
         d = {
             "id": api_id,
             "friendly_name": friendly_name,
@@ -516,7 +516,8 @@ def get_app(billing_id: int, response:Response):
             "live": live,
             "product_id": product_id,
             "product": product_name,
-            "webuser_id": webuser_id
+            "webuser_id": webuser_id,
+            "description": desc
         }
         l_data.append(d)
     
@@ -650,6 +651,20 @@ async def insert_record(
                 "status": f"email {email} exists"
             }
             return JSONResponse(status_code=403,content=resp_json)
+
+    elif table == 'audit': 
+            ## compulsory field
+            # billing_id: int
+            # webuser_id: int
+            # auditlog: st    
+        try:
+            data_obj = models.InsertAudit(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
 
     #### general processing for any table
     d_data = data_obj.dict()
@@ -857,3 +872,79 @@ async def get_password_hash(args: models.PasswordHashRequest):
         "password_hash": password_hash
     }
     return JSONResponse(content=resp_json)
+
+@app.get("/api/internal/users/{billing_id}", response_model=models.GetUsersResponse,
+        responses={404: {"model": models.MsgNotFound}})
+async def get_users_by_billing_id(billing_id:int):
+    cur.execute(f"""select u.id, username,email,bnumber,role_id,webrole.name as role_name,live from webuser u 
+                    join billing_account b on u.billing_id=b.id 
+                    join webrole on webrole.id=u.role_id where b.id={billing_id} and  u.deleted=0;""")
+
+    rows = cur.fetchall()
+    l_data = list()
+    for row in rows:
+        (webuser_id,username,email,bnumber,role_id,role_name,live) = row
+        d = {
+            "id": webuser_id,
+            "username": username,
+            "email": email,
+            "bnumber": bnumber,
+            "role_id": role_id,
+            "role_name": role_name,
+            "live": live,
+        }
+        l_data.append(d)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Users Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
+@app.get("/api/internal/audit/{billing_id}", response_model=models.GetAuditResponse,
+        responses={404: {"model": models.MsgNotFound}})
+async def get_auditlog_by_billing_id(billing_id:int):
+    cur.execute(f"""select a.dbtime,u.username,a.auditlog from audit a 
+                join webuser u on a.webuser_id = u.id where u.billing_id={billing_id} order by a.dbtime desc limit 100;""")
+
+    rows = cur.fetchall()
+    l_data = list()
+    for row in rows:
+        (ts, username,auditlog) = row
+        ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
+        print(f"timestamp: {ts} ({type(ts)})")
+        d = {
+            "timestamp": ts,
+            "username": username,
+            "audit": auditlog
+        }
+        l_data.append(d)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Auditlog Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
