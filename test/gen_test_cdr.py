@@ -45,6 +45,11 @@ d_map_product_provider = {
     1: 5 #standard => AMEEX_STD
 }
 
+d_map_webuser_id_api_id = {
+    2: 1,
+    3: 4 
+}
+
 billing_id = 1
 
 

@@ -254,6 +254,7 @@ async def create_campaign(
     # billing_id: int
     # webuser_id: int
     # product_id: int
+    # api_credential_id: int
     logger.info(f"{request.url.path}: from {request.client.host}")
     
     blast_list = arg_new_cpg.blast_list
@@ -269,12 +270,14 @@ async def create_campaign(
         billing_id = arg_new_cpg.billing_id
         webuser_id = arg_new_cpg.webuser_id
         product_id = arg_new_cpg.product_id
+        api_credential_id = arg_new_cpg.api_credential_id
+
         cpg_name = re.sub(r"'",r"''",cpg_name)
         tpoa = re.sub(r"'",r"''",tpoa)
         xms = re.sub(r"'",r"''",xms)
 
-        sql = f"""insert into cpg (name,tpoa,billing_id,webuser_id,product_id,xms) values 
-                ('{cpg_name}','{tpoa}',{billing_id},{webuser_id},{product_id},'{xms}') returning id;"""
+        sql = f"""insert into cpg (name,tpoa,billing_id,webuser_id,product_id,xms,api_credential_id) values 
+                ('{cpg_name}','{tpoa}',{billing_id},{webuser_id},{product_id},'{xms}',{api_credential_id}) returning id;"""
         logger.debug(sql)
         cur.execute(sql)
         cpg_id = cur.fetchone()[0]

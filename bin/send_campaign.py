@@ -145,7 +145,8 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
         "account": {
             "billing_id": d_ac.get("billing_id"),
             "webuser_id": d_ac.get("webuser_id"),
-            "product_id": d_ac.get("product_id")
+            "product_id": d_ac.get("product_id"),
+            "api_credential_id": d_ac.get("api_credential_id")
         }
     }
 
@@ -193,9 +194,9 @@ def main():
 
         cpg_id = None
         ### select campaign
-        cur.execute("select id,tpoa,xms,billing_id,webuser_id,product_id from cpg where status = 'TO_SEND' and sending_time < current_timestamp limit 1;")
+        cur.execute("select id,tpoa,xms,billing_id,webuser_id,product_id,api_credential_id from cpg where status = 'TO_SEND' and sending_time < current_timestamp limit 1;")
         try:
-            (cpg_id,sender,xms,billing_id,webuser_id,product_id) = cur.fetchone()
+            (cpg_id,sender,xms,billing_id,webuser_id,product_id,api_credential_id) = cur.fetchone()
         except:
             pass
         
@@ -204,6 +205,7 @@ def main():
                 'billing_id': billing_id,
                 'webuser_id': webuser_id,
                 'product_id': product_id,
+                'api_credential_id': api_credential_id,
                 'sender':sender,
                 'xms': xms,
                 'cpg_id': cpg_id

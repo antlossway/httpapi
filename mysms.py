@@ -194,6 +194,7 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     #     "webuser_name": webuser_name,
     #     "product_id": product_id,
     #     "product_name": product_name,
+    #     "api_credential_id": api_credential_id
     #     }
 
     #     data = {
@@ -213,6 +214,7 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     webuser_id = ac.get('webuser_id')
     billing_id = ac.get('billing_id')
     product_id = ac.get('product_id')
+    api_credential_id = ac.get('api_credential_id')
 
     error = 0
     msgid = data.get('msgid')
@@ -238,12 +240,12 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
         #record into redis cdr_cache
         if cpg_id != 0:
             sql = f"""insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,
-            dcs,len,udh,xms,cpg_id) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
-            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',{cpg_id});"""
+            dcs,len,udh,xms,cpg_id,api_credential_id) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
+            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',{cpg_id},{api_credential_id});"""
         else:
             sql = f"""insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,
-            dcs,len,udh,xms) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
-            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}');"""
+            dcs,len,udh,xms,api_credential_id) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
+            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',api_credential_id);"""
 
         logger.info(sql)
         if mydb.r.lpush('cdr_cache',sql): #successful transaction return True

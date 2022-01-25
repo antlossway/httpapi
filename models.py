@@ -42,11 +42,13 @@ class InternalNewCampaign(BaseModel):
     billing_id: int
     webuser_id: int
     product_id: int
+    api_credential_id: int
 
 class InternalSMS_BillingAccount(BaseModel):
     billing_id: int
     webuser_id: int
     product_id: int
+    api_credential_id: int
 
 class InternalSMS(BaseModel):
     sender: str = Field(alias='from',description="SenderID", min_length=2, max_length=11, example="Example") 
@@ -406,7 +408,8 @@ example_internal_cpg={
             "cpg_xms": "Enjoy 50% discount",
             "billing_id":1,
             "webuser_id":2,
-            "product_id":0
+            "product_id":0,
+            "api_credential_id": 1
         },
     },
     "valid_list_with_bnumber_and_variables": {
