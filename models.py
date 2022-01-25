@@ -141,9 +141,12 @@ class InternalInsert(BaseModel): #add all possible field here, depends on differ
     bnumber: Optional[str]
     ### for audit
     auditlog: Optional[str]
+
+    ### for whitelist_ip
+    ipaddress: Optional[str]
     ### common
-    billing_id: Optional[int] #webuser, api_credential, audit
-    webuser_id: Optional[int] #api_credential, audit
+    billing_id: Optional[int] #webuser, api_credential, audit, whitelist_ip
+    webuser_id: Optional[int] #api_credential, audit, whitelist_ip
 
 class InsertBillingAccount(BaseModel):
     ## compulsory field
@@ -186,6 +189,12 @@ class InsertAudit(BaseModel):
     billing_id: int
     webuser_id: int
     auditlog: str
+
+class InsertWhitelistIP(BaseModel):
+    ### for whitelist_ip
+    billing_id: int
+    webuser_id: int
+    ipaddress: str
 
 example_internal_insert={
     "billing_account": {
@@ -237,6 +246,15 @@ example_internal_insert={
             "webuser_id": 1001,
             "auditlog": "access report"
         },
+    },
+    "whitelist_ip": {
+        "summary": "insert into whitelist_ip",
+        "value":{
+            "table": "whitelist_ip",
+            "billing_id": 1001,
+            "webuser_id": 1001,
+            "ipaddress": "10.10.10.10"
+        },
     }
 
 }
@@ -269,6 +287,8 @@ class InternalUpdate(BaseModel): #add all possible field here, depends on differ
     email: Optional[str]
     role_id: Optional[int]
     bnumber: Optional[str]
+    ### for whitelist_ip
+    ipaddress: Optional[str]
     ### common field
     billing_id: Optional[int] # in table webuser and api_credential
     deleted: Optional[int] # in table webuser and api_credential
@@ -322,6 +342,15 @@ example_internal_update={
             "live": 0
         },
     },
+    "whitelist_ip": {
+        "summary": "update whitelist_ip",
+        "value": {
+            "table": "whitelist_ip",
+            "id": 1,
+            "ipaddress": "192.168.0.1",
+            "deleted": 0
+        },
+    },
 }
 
 class UpdateBillingAccount(BaseModel):
@@ -357,6 +386,10 @@ class UpdateWebUser(BaseModel):
     bnumber: Optional[str]
     deleted: Optional[int]
     live: Optional[int]
+
+class UpdateWhitelistIP(BaseModel):
+    ipaddress: Optional[str]
+    deleted: Optional[int]
 
 
 class PasswordHashRequest(BaseModel):

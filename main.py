@@ -665,7 +665,19 @@ async def insert_record(
                 "status": f"missing compulsory field"
             }
             return JSONResponse(status_code=500,content=resp_json)
-
+    elif table == 'whitelist_ip': 
+            ## compulsory field
+            # billing_id: int
+            # webuser_id: int
+            # ipaddress: str    
+        try:
+            data_obj = models.InsertWhitelistIP(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
     #### general processing for any table
     d_data = data_obj.dict()
     
@@ -810,6 +822,15 @@ async def update_record(
                 "status": f"email {email} exists"
             }
             return JSONResponse(status_code=403,content=resp_json)
+    elif table == 'whitelist_ip':
+        try:
+            data_obj = models.UpdateWhitelistIP(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
 
 
     #### general processing for any table
@@ -915,8 +936,8 @@ async def get_users_by_billing_id(billing_id:int):
 @app.get("/api/internal/audit/{billing_id}", response_model=models.GetAuditResponse,
         responses={404: {"model": models.MsgNotFound}})
 async def get_auditlog_by_billing_id(billing_id:int):
-    cur.execute(f"""select a.dbtime,u.username,a.auditlog from audit a 
-                join webuser u on a.webuser_id = u.id where u.billing_id={billing_id} order by a.dbtime desc limit 100;""")
+    cur.execute(f"""select a.creation_time,u.username,a.auditlog from audit a 
+                join webuser u on a.webuser_id = u.id where u.billing_id={billing_id} order by a.creation_time desc limit 100;""")
 
     rows = cur.fetchall()
     l_data = list()
