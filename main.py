@@ -13,6 +13,7 @@ import random
 from uuid import uuid4
 import json
 from email_validator import validate_email
+from collections import defaultdict
 
 #import myutils
 from myutils import logger, read_comma_sep_lines, gen_udh_base, gen_udh
@@ -972,3 +973,65 @@ async def get_auditlog_by_billing_id(billing_id:int):
     
     return JSONResponse(status_code=200, content=resp_json)
 
+
+@app.post("/api/internal/traffic_report")
+async def traffic_report(
+    args: models.TrafficReportRequest = Body(
+        ...,
+        examples = models.example_traffic_report_request,
+    ),
+):
+    d_arg = args.dict()
+    billing_id = d_arg.get("billing_id")
+    start_date = d_arg.get("start_date",None)
+    end_date = d_arg.get("end_date",None)
+    if not start_date or not end_date: #default return past 7 days traffic
+        sql = f"""select date(dbtime) as date, product.name as product, status,count(*) from cdr join product on product.id=cdr.product_id 
+                where date(dbtime) >= current_date - interval '1 days' and billing_id={billing_id} group by date,product,status order by date;"""
+    else:
+        sql = f"""select date(dbtime) as date, product.name as product, status,count(*) from cdr join product on product.id=cdr.product_id  
+        where dbtime between '{start_date}' and '{end_date}' and billing_id={billing_id} group by date,product,status order by date;"""
+    print(sql)
+    l_data = list()
+    data = defaultdict(dict)
+
+    cur.execute(sql)
+    rows = cur.fetchall()
+    for row in rows:
+        (day,product,status,qty) = row
+        day = day.strftime("%Y-%m-%d")
+        if not status or status == '':
+            status = 'Pending'
+        try:
+            data[f"{day}---{product}"][status] += qty
+        except:
+            data[f"{day}---{product}"][status] = qty
+    
+    for key,d_value in sorted(data.items()):
+        d = dict()
+        total = 0
+        for k,v in d_value.items():
+            d[k] = v
+            total += v
+        day,product = key.split('---')
+        d['date'] = day
+        d['product'] = product
+        d['total_sent'] = total
+        l_data.append(d)
+    
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode" : 0,
+            "status": "Success",
+            "count": len(l_data),
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"No Record found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+    

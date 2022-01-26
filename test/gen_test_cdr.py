@@ -1,4 +1,4 @@
-#!/usr/bin/evn python3
+#!/usr/bin/env python3
 import random
 import string
 from datetime import datetime
@@ -35,7 +35,7 @@ l_operator_id = [408,252,578]
 l_sender = ['DBS', 'OCBC', 'Sephora', 'Apple']
 content_template = ['<ID> is your verfication code', 'PIN CODE: <ID>']
 
-l_status = ['DELIVRD','EXPIRED','REJECTD','UNDELIV']
+l_status = ['DELIVRD','EXPIRED','REJECTD','UNDELIV','Pending']
 
 l_webuser_id = [2,3]
 l_product_id = [0,1]
@@ -64,11 +64,15 @@ def gen_cdr():
     msgid = str(uuid4())
     operator_id = random.choices(l_operator_id, weights=[20,30,60])[0]
     xms = gen_content()
-    status = random.choices(l_status,weights=[90,1,2,7])[0]
+    status = random.choices(l_status,weights=[90,1,2,5,2])[0]
     ts = gen_random_timestamp()
+    api_credential_id = d_map_webuser_id_api_id.get(webuser_id)
     
-    sql = f"""insert into cdr (dbtime,webuser_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,status,provider_id) values ('{ts}',{webuser_id},{billing_id},{product_id}, '{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}','{status}', {provider_id});"""
-    
+    if status == 'Pending':
+        sql = f"""insert into cdr (dbtime,webuser_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,provider_id,api_credential_id) values ('{ts}',{webuser_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}',{provider_id},{api_credential_id});"""
+    else:
+        sql = f"""insert into cdr (dbtime,webuser_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,status,provider_id,api_credential_id) values ('{ts}',{webuser_id},{billing_id},{product_id}, '{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}','{status}', {provider_id},{api_credential_id});"""
+
     print(sql)
 
 if __name__ == '__main__':
