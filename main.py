@@ -14,9 +14,10 @@ from uuid import uuid4
 import json
 from email_validator import validate_email
 from collections import defaultdict
+import os
 
 #import myutils
-from myutils import logger, read_comma_sep_lines, gen_udh_base, gen_udh
+from myutils import logger, read_comma_sep_lines, gen_udh_base, gen_udh, generate_otp
 import mysms
 #from mysms import create_sms
 from mydb import cur,r,g_account,g_numbering_plan
@@ -682,8 +683,58 @@ async def insert_record(
                 "status": f"missing compulsory field"
             }
             return JSONResponse(status_code=500,content=resp_json)
+    elif table == 'smpp_account':
+        ##compulsory field
+        #billing_id: int
+        #smpp_account_name: str
+        #product_id: int
+        try:
+            data_obj = models.InsertSMPPAccount(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
+        name = data_obj.name.strip() #smpp_account.name should be unique
+        ## remove any special char, replace space with _
+        name = re.sub(r'\s',r'_', name)
+        existing_id = None
+        cur.execute("select id from smpp_account where name=%s", (name,))
+        try:
+            existing_id = cur.fetchone()[0]
+        except:
+            pass
+
+        if existing_id:
+            resp_json = {
+                "errorcode":2,
+                "status": f"smpp_account {name} exists"
+            }
+            return JSONResponse(status_code=403,content=resp_json)
+
+        data_obj.name = name #put back cleaned name into object
+
     #### general processing for any table
     d_data = data_obj.dict()
+
+    if table == 'smpp_account':
+        name = d_data.get('name')
+        ## create directory, notif_dir
+        uc_name = name.upper()
+        ext = generate_otp('upper',4) #give a random extension to avoid same subdir name, e.g ABC4567
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        directory = os.path.join(basedir, f"sendxms/SERVER_SUPER100/received/{uc_name}_{ext}")
+        notif3_dir = os.path.join(basedir, f"sendxms/SERVER_SUPER100/spool/{uc_name}_{ext}")
+        d_data['directory'] = directory
+        d_data['notif3_dir'] = notif3_dir 
+        ## create systemid, password
+        password = generate_otp('alphanumeric',8)
+        systemid = name[:8]
+        systemid = re.sub(r'_$','',systemid)
+        d_data['systemid'] = systemid
+        d_data['password'] = password
+        print(f"debug smpp_account: {json.dumps(d_data,indent=4)}")
     
     data = dict() #hold the fields to be inserted into destination table
     
@@ -718,7 +769,8 @@ async def insert_record(
                 resp_json = {
                     "errorcode":0,
                     "status": "Success",
-                    "id": new_id
+                    "id": new_id,
+                    "result": data
                 }
         except Exception as err:
             resp_json = {
@@ -835,7 +887,15 @@ async def update_record(
                 "status": f"missing compulsory field"
             }
             return JSONResponse(status_code=500,content=resp_json)
-
+    elif table == 'smpp_account':
+        try:
+            data_obj = models.UpdateSMPPAccount(**args.dict()) #convert into defined model, removing useless field
+        except:
+            resp_json = {
+                "errorcode":2,
+                "status": f"missing compulsory field"
+            }
+            return JSONResponse(status_code=500,content=resp_json)
 
     #### general processing for any table
     d_data = data_obj.dict()
@@ -867,7 +927,8 @@ async def update_record(
                 resp_json = {
                     "errorcode":0,
                     "status": "Success",
-                    "id": new_id
+                    "id": new_id,
+                    "result": data
                 }
                 logger.debug(f"### reply internal update: {json.dumps(resp_json,indent=4)}")
 

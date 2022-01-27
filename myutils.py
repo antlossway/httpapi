@@ -37,7 +37,6 @@ def read_config():
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logging.Formatter.converter = time.gmtime
-
 ## create a console handler
 #c_handler = logging.StreamHandler()
 #c_handler.setLevel(logging.INFO)
@@ -70,6 +69,24 @@ def gen_udh_base():
 def gen_udh(udh_base,split,i):
     return udh_base + format(split,'02d') + format(i,'02d')
 
+def generate_otp(type,length):
+# Importing string library function
+    import string
+
+    # Takes random choices from
+    # ascii_letters and digits
+    otp, base = '',''
+    if type == 'digit':
+        base = string.digits
+    elif type == 'alphanumeric':
+        base = string.ascii_uppercase + string.ascii_lowercase + string.digits
+    elif type == 'alpha':
+        base = string.ascii_uppercase + string.ascii_lowercase
+    elif type == 'upper':
+        base = string.ascii_uppercase + string.digits
+
+    otp = ''.join( [random.choice(base) for n in range(length)] )
+    return otp
 
 def clean_msisdn(msisdn):
     number = msisdn.strip() #remove trailing whitespaces

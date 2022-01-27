@@ -129,7 +129,6 @@ class InternalInsert(BaseModel): #add all possible field here, depends on differ
     ### for api_credential
     api_key: Optional[str]
     api_secret: Optional[str]
-    product_id: Optional[int]
     callback_url: Optional[str]
     friendly_name: Optional[str]
     description: Optional[str]
@@ -144,11 +143,16 @@ class InternalInsert(BaseModel): #add all possible field here, depends on differ
     ### for audit
     auditlog: Optional[str]
 
-    ### for whitelist_ip
-    ipaddress: Optional[str]
+    ### for smpp_account
+    name: Optional[str]
+    comment: Optional[str]
+
     ### common
-    billing_id: Optional[int] #webuser, api_credential, audit, whitelist_ip
+    billing_id: Optional[int] #webuser, api_credential, audit, whitelist_ip, smpp_account
     webuser_id: Optional[int] #api_credential, audit, whitelist_ip
+    ipaddress: Optional[str] #whitelist_ip, smpp_account
+    product_id: Optional[int] #api_credential, smpp_account
+
 
 class InsertBillingAccount(BaseModel):
     ## compulsory field
@@ -197,6 +201,16 @@ class InsertWhitelistIP(BaseModel):
     billing_id: int
     webuser_id: int
     ipaddress: str
+
+class InsertSMPPAccount(BaseModel):
+    ### for smpp_account
+    billing_id: int
+    name: str = Field(description="only letters and digits, no special characters")
+    product_id: int
+    ipaddress: Optional[str]
+    comment: Optional[str] = Field(description="add note to describe this account")
+    ### will be inserted by API
+    # systemid, password, directory, notif3_dir
 
 example_internal_insert={
     "billing_account": {
@@ -255,9 +269,21 @@ example_internal_insert={
             "table": "whitelist_ip",
             "billing_id": 1001,
             "webuser_id": 1001,
-            "ipaddress": "10.10.10.10"
+            "ipaddress": "192.168.0.1,54.194.67.157"
         },
-    }
+    },
+    "smpp_account": {
+        "summary": "insert into smpp_account",
+        "description": "UI let admin to create smpp account for a company",
+        "value":{
+            "table": "smpp_account",
+            "billing_id": 1,
+            "name": "abc",
+            "product_id": 0,
+            "comment": "premium route for abc",
+            "ipaddress": "192.168.0.1,54.194.67.157"
+        },
+    },
 
 }
 
@@ -289,12 +315,16 @@ class InternalUpdate(BaseModel): #add all possible field here, depends on differ
     email: Optional[str]
     role_id: Optional[int]
     bnumber: Optional[str]
-    ### for whitelist_ip
+    ### for whitelist_ip and smpp_account
     ipaddress: Optional[str]
+    ### for smpp_account
+    name: Optional[str]
+    comment: Optional[str]
     ### common field
-    billing_id: Optional[int] # in table webuser and api_credential
+    billing_id: Optional[int] # in table webuser and api_credential, smpp_account, whitelist_ip
     deleted: Optional[int] # in table webuser and api_credential
-    live: Optional[int] # in table api_credential, webuser
+    live: Optional[int] # in table api_credential, webuser, smpp_account
+
     
 example_internal_update={
     "billing_account": {
@@ -353,6 +383,16 @@ example_internal_update={
             "deleted": 0
         },
     },
+    "smpp_account": {
+        "summary": "update smpp_account",
+        "value": {
+            "table": "smpp_account",
+            "id": 1,
+            "ipaddress": "192.168.0.1,10.10.10.1",
+            "product_id": 0,
+            "comment": "some comment"
+        },
+    },
 }
 
 class UpdateBillingAccount(BaseModel):
@@ -393,6 +433,10 @@ class UpdateWhitelistIP(BaseModel):
     ipaddress: Optional[str]
     deleted: Optional[int]
 
+class UpdateSMPPAccount(BaseModel):
+    ipaddress: Optional[str]
+    product_id: Optional[int]
+    comment: Optional[str]
 
 class PasswordHashRequest(BaseModel):
     password: str = Field(example="combination of letter,number and special characters")

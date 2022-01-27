@@ -2,6 +2,7 @@ import os
 from configparser import ConfigParser
 import psycopg2 as pg
 import re
+import redis
 
 
 def read_config(cfg):
@@ -9,6 +10,18 @@ def read_config(cfg):
     config.read(cfg)
     
     return config
+
+def connect_redis():
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    cfg = os.path.join(basedir, "../etc/config.txt")
+
+    config = read_config(cfg)
+
+    redis_host = config['redis']['host']
+    redis_port = config['redis']['port']
+
+    r = redis.Redis(host=redis_host,port=redis_port)
+    return r 
 
 def connectdb():
     basedir = os.path.abspath(os.path.dirname(__file__))
