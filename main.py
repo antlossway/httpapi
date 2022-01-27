@@ -721,20 +721,21 @@ async def insert_record(
     if table == 'smpp_account':
         name = d_data.get('name')
         ## create directory, notif_dir
-        uc_name = name.upper()
-        ext = generate_otp('upper',4) #give a random extension to avoid same subdir name, e.g ABC4567
+        ext = generate_otp('lower',4) #give a random extension to avoid same subdir name, e.g abc4567
+        systemid = name[:8]
+        systemid = f"{re.sub(r'_$','',systemid)}_{ext}"
+        subdir = systemid.upper()
         basedir = os.path.abspath(os.path.dirname(__file__))
-        directory = os.path.join(basedir, f"sendxms/SERVER_SUPER100/received/{uc_name}_{ext}")
-        notif3_dir = os.path.join(basedir, f"sendxms/SERVER_SUPER100/spool/{uc_name}_{ext}")
+        directory = os.path.join(basedir, f"sendxms/SERVER_SUPER100/received/{subdir}")
+        notif3_dir = os.path.join(basedir, f"sendxms/SERVER_SUPER100/spool/{subdir}")
         d_data['directory'] = directory
         d_data['notif3_dir'] = notif3_dir 
         ## create systemid, password
         password = generate_otp('alphanumeric',8)
-        systemid = name[:8]
-        systemid = re.sub(r'_$','',systemid)
+
         d_data['systemid'] = systemid
         d_data['password'] = password
-        print(f"debug smpp_account: {json.dumps(d_data,indent=4)}")
+        logger.info(f"debug smpp_account: {json.dumps(d_data,indent=4)}")
     
     data = dict() #hold the fields to be inserted into destination table
     
@@ -1009,7 +1010,6 @@ async def get_auditlog_by_billing_id(billing_id:int):
     for row in rows:
         (ts, username,auditlog) = row
         ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
-        print(f"timestamp: {ts} ({type(ts)})")
         d = {
             "timestamp": ts,
             "username": username,
@@ -1052,7 +1052,7 @@ async def traffic_report(
     else:
         sql = f"""select date(dbtime) as date, product.name as product, status,count(*) from cdr join product on product.id=cdr.product_id  
         where dbtime between '{start_date}' and '{end_date}' and billing_id={billing_id} group by date,product,status order by date;"""
-    print(sql)
+    logger.info(sql)
     l_data = list()
     data = defaultdict(dict)
 

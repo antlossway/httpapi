@@ -84,6 +84,8 @@ def generate_otp(type,length):
         base = string.ascii_uppercase + string.ascii_lowercase
     elif type == 'upper':
         base = string.ascii_uppercase + string.digits
+    elif type == 'lower':
+        base = string.ascii_lowercase + string.digits
 
     otp = ''.join( [random.choice(base) for n in range(length)] )
     return otp
