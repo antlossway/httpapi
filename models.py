@@ -486,14 +486,15 @@ example_internal_cpg={
 class TrafficReportRequest(BaseModel):
     start_date: Optional[str] ## default past 7 days
     end_date: Optional[str]
-    billing_id: int
+    billing_id: Optional[int]
+    account_id: Optional[int]
 
 example_traffic_report_request = {
     "specify date range":{
         "value": {
             "start_date": "2022-01-20",
             "end_date": "2022-01-26",
-            "billing_id": 1
+            "account_id": 10003
         },
     },
     "no date range, default past 7 days":{

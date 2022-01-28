@@ -1185,7 +1185,7 @@ async def get_auditlog_by_billing_id(billing_id:int):
     return JSONResponse(status_code=200, content=resp_json)
 
 
-@app.post("/api/internal/traffic_report")
+@app.post("/api/internal/traffic_report") #optional arg: billing_id, account_id
 async def traffic_report(
     args: models.TrafficReportRequest = Body(
         ...,
@@ -1194,39 +1194,53 @@ async def traffic_report(
 ):
     d_arg = args.dict()
     billing_id = d_arg.get("billing_id")
+    account_id = d_arg.get("account_id")
     start_date = d_arg.get("start_date",None)
     end_date = d_arg.get("end_date",None)
     if not start_date or not end_date: #default return past 7 days traffic
-        sql = f"""select date(dbtime) as date, product.name as product, status,count(*) from cdr join product on product.id=cdr.product_id 
-                where date(dbtime) >= current_date - interval '1 days' and billing_id={billing_id} group by date,product,status order by date;"""
+        sql = f"""select date(dbtime) as date, b.company_name,a.name as account_name,p.name as product_name,
+        status,sum(split) from cdr join billing_account b on cdr.billing_id=b.id join account a on cdr.account_id=a.id 
+        join product p on cdr.product_id=p.id where date(dbtime) >= current_date - interval '7 days' """
+
+
     else:
-        sql = f"""select date(dbtime) as date, product.name as product, status,count(*) from cdr join product on product.id=cdr.product_id  
-        where dbtime between '{start_date}' and '{end_date}' and billing_id={billing_id} group by date,product,status order by date;"""
+        sql = f"""select date(dbtime) as date, b.company_name,a.name as account_name,p.name as product_name,
+        status,sum(split) from cdr join billing_account b on cdr.billing_id=b.id join account a on cdr.account_id=a.id 
+        join product p on cdr.product_id=p.id where date(dbtime) between '{start_date}' and '{end_date}' """
+
+    if account_id:
+        sql += f"and cdr.account_id = {account_id}"
+    elif billing_id:
+        sql += f"and cdr.billing_id = {billing_id}"
+    sql += "group by date,company_name,account_name,product_name,status order by date"
     logger.info(sql)
+
     l_data = list()
     data = defaultdict(dict)
 
     cur.execute(sql)
     rows = cur.fetchall()
     for row in rows:
-        (day,product,status,qty) = row
+        (day,company_name,account_name,product_name,status,qty) = row
         day = day.strftime("%Y-%m-%d")
         if not status or status == '':
             status = 'Pending'
         try:
-            data[f"{day}---{product}"][status] += qty
+            data[f"{day}---{company_name}---{account_name}---{product_name}"][status] += qty
         except:
-            data[f"{day}---{product}"][status] = qty
+            data[f"{day}---{company_name}---{account_name}---{product_name}"][status] = qty
     
     for key,d_value in sorted(data.items()):
+        day,company_name,account_name,product_name = key.split('---')
         d = dict()
         total = 0
         for k,v in d_value.items():
             d[k] = v
             total += v
-        day,product = key.split('---')
         d['date'] = day
-        d['product'] = product
+        d['company_name'] = company_name
+        d['account_name'] = account_name
+        d['product_name'] = product_name
         d['total_sent'] = total
         l_data.append(d)
     
