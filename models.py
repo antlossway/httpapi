@@ -45,7 +45,7 @@ class InternalNewCampaign(BaseModel):
 
 class InternalSMS_BillingAccount(BaseModel):
     billing_id: int
-    webuser_id: int
+    account_id: int
     product_id: int
 
 class InternalSMS(BaseModel):
