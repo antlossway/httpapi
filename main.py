@@ -622,18 +622,20 @@ def get_accounts_by_billing_id(billing_id: int, response:Response):
 @app.get("/api/internal/account/")#get all accounts (related to billing accounts)
 def get_all_accounts():
     cur.execute(f"""select billing_id,b.company_name,a.id as account_id,a.name as account_name, 
-    a.connection_type from account a join billing_account b on b.id=a.billing_id where a.deleted=0;""")
+    a.connection_type,p.name as product_name from account a join billing_account b on b.id=a.billing_id 
+    join product p on a.product_id = p.id where a.deleted=0;""")
 
     l_data = list() #list of dict
     rows = cur.fetchall()
     for row in rows:
-        (billing_id,company_name,account_id,account_name,connection_type) = row
+        (billing_id,company_name,account_id,account_name,connection_type,product_name) = row
         d = {
             "billing_id": billing_id,
             "company_name": company_name,
             "account_id": account_id,
             "account_name": account_name,
-            "connection_type": connection_type
+            "connection_type": connection_type,
+            "product_name": product_name
         }
         l_data.append(d)
     
