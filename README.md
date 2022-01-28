@@ -5,15 +5,23 @@ This is a backend for white-label SMS platform using fastAPI.
 
 
 Install system package
+----------------------
 apt install cpanminus
+apt install libpq-dev
 
 perl module DBI
 perl -MCPAN -e 'install Bundle::DBI'
 cpanm install DBD::Pg
 
 Install database
+-----------------
 - postgresql
 - redis-server
+
+create systemd service file
+--------------------------
+/etc/systemd/system/httpapi.service
+
 
 Setup FastAPI
 ====================
@@ -41,4 +49,5 @@ password=xxxxx
 
 [provider_api_credential]
 provider_name=api_key---api_secret
+
 

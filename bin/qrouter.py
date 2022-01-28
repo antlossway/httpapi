@@ -4,7 +4,7 @@ check subdir under ~/sendxms/SERVER_SUPER100/received/
 for each subdir process batch files
 for each file
 1. check routing and move file to output SMPP folder
-2. insert into cdr (insert to redis, insert_cdr_from_redis_cache.py will take care insertion)
+2. insert into cdr (insert to redis, insert_cdr_from_redis_cache.py will take care insertion to postgresql DB)
 """
 
 import time
@@ -16,25 +16,26 @@ import logging
 import re
 import random
 import site
+from collections import defaultdict
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 libdir = os.path.join(basedir, "../pylib")
 site.addsitedir(libdir)
 import DB
 
-mode = ''
+ext = '' # http
 try:
-    mode = sys.argv[1]
+    ext = sys.argv[1]
 except:
     pass
 
 instance = os.path.basename(__file__).split(".")[0]
 log = os.path.join(basedir, f"../log/{instance}.log")
 lockfile= os.path.join(basedir, f"../var/lock/{instance}.lock")
-config_file = os.path.join(basedir, "../etc/router.cfg")
 
-print(log,lockfile,config_file)
-
+##########################
+#### configure logger ####
+##########################
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.Formatter.converter = time.gmtime
@@ -47,7 +48,9 @@ handler.setFormatter(formatter)
 # add the handler to the logger
 logger.addHandler(handler)
 
-### global variable
+##########################
+#### global variables ####
+##########################
 db = DB.connectdb()
 if not db:
     logger.warning("!!! cannot connect to PostgreSQL DB")
@@ -60,6 +63,13 @@ if not r:
     exit()
 
 batch = 2
+d_ac = dict() #keep smpp_account info
+d_customer_operator_routing = dict()
+d_provider = dict()
+d_smsc = dict()
+d_smsc_dir = dict()
+d_provider_smsc = defaultdict(list) #provider_id => [smsc_id1, smsc_id2]
+
 
 #### regex to match key info in SMS file
 r_bnumber = re.compile("^Phone=(.*)")
@@ -82,7 +92,9 @@ r_msisdn = re.compile("^\+?\d+$")
 #r_optout_with_keyword = re.compile(r'(optout|stop)\s+(\w+)',re.IGNORECASE)
 #r_optout = re.compile(r'(optout|stop)',re.IGNORECASE)
 
-d_ac = dict() #keep smpp_account info
+def print_dict(data,name):
+    for k,v in data.items():
+        logger.info(f"{name}: {k} => {v}")
 
 def read_config():
 
@@ -96,10 +108,56 @@ def read_config():
         for row in rows:
             (acid,acname,billing_id,in_dir,product_id) = row
             d_ac[acid] = f"{acname}---{billing_id}---{in_dir}---{product_id}"
+    else:
+        logger.warning("!!! query table smpp_account return empty result, keep existing data")
 
-    for k,v in d_ac.items():
-        logger.info(f"{k} => {v}")
+    print_dict(d_ac,'smpp_account')
+
+    sql = f"select product_id,country_id,operator_id,provider_id from customer_operator_routing;"
+    cur.execute(sql)
+    rows = cur.fetchall()
+    if rows:
+        d_customer_operator_routing.clear()
+        for row in rows:
+            (product_id,country_id,operator_id,provider_id) = row
+            d_customer_operator_routing[f"{product_id}---{country_id}---{operator_id}"] = provider_id
+    else:
+        logger.warning("!!! query table customer_operator_routing return empty result, keep existing data")
+
+    print_dict(d_customer_operator_routing,'customer_operator_routing')
     
+
+    sql = f"select id,name from provider")
+    cur.execute(sql)
+    rows = cur.fetchall()
+    if rows:
+        d_provider.clear()
+        (provider_id,provider_name) = row
+        d_provider[provider_id] = provider_name
+    else:
+        logger.warning("!!! query table provider return empty result, keep existing data")
+    print_dict(d_provider,'provider')
+
+
+    sql = f"select id,name,provider_id,directory from smsc")
+    cur.execute(sql)
+    rows = cur.fetchall()
+    if rows:
+        d_smsc.clear()
+        d_provider_smsc.clear()
+
+        (smsc_id,smsc_name,provider_id,directory) = row
+        d_smsc[smsc_id] = smsc_name
+        d_smsc_dir[smsc_id] = directory
+        d_provider_smsc[provider_id].append[smsc_id]
+        d_smsc_provider[smsc_id] = provider_id
+    else:
+        logger.warning("!!! query table smsc return empty result, keep existing data")
+    print_dict(d_smsc,'smsc')
+    print_dict(d_smsc_dir,'smsc_dir')
+    print_dict(d_provider_smsc,'provider_smsc mapping')
+    print_dict(d_smsc_provider,'smsc_provider mapping')
+
     logger.info("===============================")
 
 def clean_bnumber(bnumber):
@@ -142,9 +200,26 @@ def scandir(acid):
             if process_file(myfile,acid):
                 count += 1 
 
-def get_route():
+def get_route(product_id,cid,opid):
     ###smsc_id---provider_id---output_dir
-    return "1---6---/home/xqy/dev/python3/fastapi/httpapi/sendxms/CMI_PREMIUM1/spool/CMI_PREMIUM1"
+    #return "1---6---/home/xqy/dev/python3/fastapi/httpapi/sendxms/CMI_PREMIUM1/spool/CMI_PREMIUM1"
+
+    ### product_id---country_id---operator_id => provider_id
+    pattern_all = f"{product_id}---4---4"
+    pattern_c_all = f"{product_id}---{cid}---4"
+    pattern_op = f"{product_id}---{cid}---{opid}"
+
+    if pattern_op in d_customer_operator_routing:
+        provider_id = d_customer_operator_routing.get(pattern_op)
+    elif pattern_c_all in d_customer_operator_routing:
+        provider_id = d_customer_operator_routing.get(pattern_c_all)
+    else:
+        provider_id = d_customer_operator_routing.get(pattern_all)
+
+    ### distribute to smsc
+    smsc_id = random.choices(d_provider_smsc.get(provider_id))
+
+    return smsc_id
 
 def process_file(myfile,acid):
     acname,billing_id,in_dir,product_id = d_ac.get(acid).split("---")

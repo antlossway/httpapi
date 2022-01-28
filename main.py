@@ -498,31 +498,64 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 
     return JSONResponse(status_code=200, content=resp_json)
 
+@app.get("/api/billing/{billing_id}") # get billing account info
+async def get_billing_account_info(billing_id: int):
+    cur.execute(f"""
+    select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
+    contact_number,billing_type,currency,live from billing_account where id=%s""",(billing_id,))
+
+    try:
+        row = cur.fetchone()
+        (billing_id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
+        contact_number,billing_type,currency,live) = row
+        resp_json = {
+            "billing_id": billing_id,
+            "company_name": company_name,
+            "company_address": company_address,
+            "country": country,
+            "city": city,
+            "postal_code": postal_code,
+            "contact_name": contact_name,
+            "billing_email": billing_email,
+            "contact_number": contact_number,
+            "billing_type": billing_type,
+            "currency": currency,
+            "live": live
+        }
+        print(resp_json)
+    except:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Users Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+
+    return JSONResponse(status_code=200, content=resp_json)
+
 
 # use responses to add additional response like returning errors
-@app.get("/api/internal/application/{billing_id}", response_model=models.AppResponse,
-        responses={404: {"model": models.MsgNotFound}}
-) #get all api_credentials for a billing account
-def get_app_by_billing_id(billing_id: int, response:Response):
-    cur.execute(f"""select a.id, api_key,api_secret,webuser_id,product_id,product.name as product_name,a.live,callback_url,
-    friendly_name, a.description from api_credential a join product on product.id=a.product_id where a.billing_id=%s and a.deleted=0;
-    """, (billing_id,))
+@app.get("/api/internal/account/{billing_id}") #get all accounts for a billing account
+def get_accounts_by_billing_id(billing_id: int, response:Response):
+    cur.execute(f"""
+    select a.id as account_id,a.name as account_name,a.connection_type,p.name as product_name,systemid,password,api_key,api_secret,
+    callback_url,a.comment from account a join product p on a.product_id=p.id where a.deleted=0 and billing_id=%s
+    """,(billing_id,))
 
     l_data = list() #list of dict
     rows = cur.fetchall()
     for row in rows:
-        (api_id,api_key,api_secret,webuser_id,product_id,product_name,live,callback_url,friendly_name, desc) = row
+        (account_id,account_name,connection_type,product_name,systemid,password,api_key,api_secret,callback_url,comment) = row
         d = {
-            "id": api_id,
-            "friendly_name": friendly_name,
+            "account_id": account_id,
+            "account_name": account_name,
+            "connction_type": connection_type,
+            "product_name": product_name,
+            "systemid": systemid,
+            "password": password,
             "api_key": api_key,
             "api_secret": api_secret,
             "callback_url": callback_url,
-            "live": live,
-            "product_id": product_id,
-            "product": product_name,
-            "webuser_id": webuser_id,
-            "description": desc
+            "comment": comment
         }
         l_data.append(d)
     
@@ -537,12 +570,125 @@ def get_app_by_billing_id(billing_id: int, response:Response):
     else:
         resp_json = {
             "errorcode": 1,
-            "status":"App Not found!"
+            "status":f"Account Not found for billingid {billing_id}"
         }
         return JSONResponse(status_code=404, content=resp_json)
     
     return JSONResponse(status_code=200, content=resp_json)
+
+@app.get("/api/internal/account/")#get all accounts (related to billing accounts)
+def get_all_accounts():
+    cur.execute(f"""select billing_id,b.company_name,a.id as account_id,a.name as account_name, 
+    a.connection_type from account a join billing_account b on b.id=a.billing_id where a.deleted=0;""")
+
+    l_data = list() #list of dict
+    rows = cur.fetchall()
+    for row in rows:
+        (billing_id,company_name,account_id,account_name,connection_type) = row
+        d = {
+            "billing_id": billing_id,
+            "company_name": company_name,
+            "account_id": account_id,
+            "account_name": account_name,
+            "connection_type": connection_type
+        }
+        l_data.append(d)
     
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Account Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
+@app.get("/api/internal/users/")#get all webuser (related to billing accounts)
+def get_all_webuser():
+    cur.execute(f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.id as billing_id,b.company_name,u.role_id,r.name as role_name,
+    u.live from webuser u join billing_account b on u.billing_id=b.id join webrole r on r.id=u.role_id where u.deleted=0;""")
+
+    l_data = list() #list of dict
+    rows = cur.fetchall()
+    for row in rows:
+        (webuser_id,username,email,bnumber,billing_id,company_name,role_id,role_name,live) = row
+        d = {
+            "webuser_id": webuser_id,
+            "username": username,
+            "email": email,
+            "bnumber": bnumber,
+            "billing_id": billing_id,
+            "company_name": company_name,
+            "role_id": role_id,
+            "role_name": role_name,
+            "live": live
+        }
+        l_data.append(d)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Webuser Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
+@app.get("/api/internal/users/{billing_id}")#get all webuser (related to billing accounts)
+def get_webusers_by_billing_id(billing_id:int):
+    cur.execute(f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.company_name,u.role_id,r.name as role_name,
+    u.live from webuser u join billing_account b on u.billing_id=b.id join webrole r on r.id=u.role_id 
+    where u.deleted=0 and billing_id=%s;""",(billing_id,))
+
+    l_data = list() #list of dict
+    rows = cur.fetchall()
+    for row in rows:
+        (webuser_id,username,email,bnumber,company_name,role_id,role_name,live) = row
+        d = {
+            "webuser_id": webuser_id,
+            "username": username,
+            "email": email,
+            "bnumber": bnumber,
+            "company_name": company_name,
+            "role_id": role_id,
+            "role_name": role_name,
+            "live": live
+        }
+        l_data.append(d)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Webuser Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
 def get_userid_from_username(username):
     cur.execute("select id from webuser where username=%s",(username,))
     try:
@@ -608,21 +754,21 @@ async def insert_record(
                     return JSONResponse(status_code=422,content=resp_json)
                     break
     
-    elif table == 'api_credential':
-            ## compulsory field
-            # api_key: str
-            # api_secret: str
-            # webuser_id: int
-            # product_id: int
-            # billing_id: int
-        try:
-            data_obj = models.InsertAPICredential(**args.dict()) #convert into defined model, removing useless field
-        except:
-            resp_json = {
-                "errorcode":2,
-                "status": f"missing compulsory field"
-            }
-            return JSONResponse(status_code=500,content=resp_json)
+    # elif table == 'api_credential':
+    #         ## compulsory field
+    #         # api_key: str
+    #         # api_secret: str
+    #         # webuser_id: int
+    #         # product_id: int
+    #         # billing_id: int
+    #     try:
+    #         data_obj = models.InsertAPICredential(**args.dict()) #convert into defined model, removing useless field
+    #     except:
+    #         resp_json = {
+    #             "errorcode":2,
+    #             "status": f"missing compulsory field"
+    #         }
+    #         return JSONResponse(status_code=500,content=resp_json)
 
     elif table == 'webuser': 
             ## compulsory field
@@ -683,24 +829,42 @@ async def insert_record(
                 "status": f"missing compulsory field"
             }
             return JSONResponse(status_code=500,content=resp_json)
-    elif table == 'smpp_account':
+    elif table == 'account':
         ##compulsory field
         #billing_id: int
-        #smpp_account_name: str
+        #name: str
         #product_id: int
-        try:
-            data_obj = models.InsertSMPPAccount(**args.dict()) #convert into defined model, removing useless field
-        except:
+        #connection_type: smpp/http
+        conn_type = d_args.get('connection_type')
+        if not conn_type:
             resp_json = {
                 "errorcode":2,
-                "status": f"missing compulsory field"
+                "status": f"missing compulsory field connection_type"
             }
             return JSONResponse(status_code=500,content=resp_json)
+        if conn_type == 'smpp':
+            try:
+                data_obj = models.InsertSMPPAccount(**args.dict()) #convert into defined model, removing useless field
+            except:
+                resp_json = {
+                    "errorcode":2,
+                    "status": f"missing compulsory field"
+                }
+                return JSONResponse(status_code=500,content=resp_json)
+        else:
+            try:
+                data_obj = models.InsertHTTPAccount(**args.dict()) #convert into defined model, removing useless field
+            except:
+                resp_json = {
+                    "errorcode":2,
+                    "status": f"missing compulsory field"
+                }
+                return JSONResponse(status_code=500,content=resp_json)
         name = data_obj.name.strip() #smpp_account.name should be unique
         ## remove any special char, replace space with _
-        name = re.sub(r'\s',r'_', name)
+        name = re.sub(r'\s',r'_', name) #abc xyz => abc_xyz
         existing_id = None
-        cur.execute("select id from smpp_account where name=%s", (name,))
+        cur.execute("select id from account where name=%s", (name,))
         try:
             existing_id = cur.fetchone()[0]
         except:
@@ -709,7 +873,7 @@ async def insert_record(
         if existing_id:
             resp_json = {
                 "errorcode":2,
-                "status": f"smpp_account {name} exists"
+                "status": f"account name {name} exists"
             }
             return JSONResponse(status_code=403,content=resp_json)
 
@@ -718,11 +882,11 @@ async def insert_record(
     #### general processing for any table
     d_data = data_obj.dict()
 
-    if table == 'smpp_account':
+    if table == 'account' and conn_type == 'smpp': # generate systemid/password/directory/notif3_dir
         name = d_data.get('name')
         ## create directory, notif_dir
         ext = generate_otp('lower',4) #give a random extension to avoid same subdir name, e.g abc4567
-        systemid = name[:8]
+        systemid = name[:12]
         systemid = f"{re.sub(r'_$','',systemid)}_{ext}"
         subdir = systemid.upper()
         basedir = os.path.abspath(os.path.dirname(__file__))
@@ -736,7 +900,12 @@ async def insert_record(
         d_data['systemid'] = systemid
         d_data['password'] = password
         logger.info(f"debug smpp_account: {json.dumps(d_data,indent=4)}")
-    
+    if table == 'account' and conn_type == 'http': # generate api_key/api_secret
+        api_key = generate_otp('alphanumeric',20)
+        api_secret = generate_otp('alphanumeric',40)
+        d_data['api_key'] = api_key
+        d_data['api_secret'] = api_secret
+
     data = dict() #hold the fields to be inserted into destination table
     
     fields,values = '', ''
@@ -843,15 +1012,15 @@ async def update_record(
                     return JSONResponse(status_code=422,content=resp_json)
                     break
     
-    elif table == 'api_credential':
-        try:
-            data_obj = models.UpdateAPICredential(**args.dict()) #convert into defined model, removing useless field
-        except:
-            resp_json = {
-                "errorcode":2,
-                "status": f"missing compulsory field"
-            }
-            return JSONResponse(status_code=500,content=resp_json)
+    # elif table == 'api_credential':
+    #     try:
+    #         data_obj = models.UpdateAPICredential(**args.dict()) #convert into defined model, removing useless field
+    #     except:
+    #         resp_json = {
+    #             "errorcode":2,
+    #             "status": f"missing compulsory field"
+    #         }
+    #         return JSONResponse(status_code=500,content=resp_json)
 
     elif table == 'webuser': 
         try:
@@ -888,9 +1057,9 @@ async def update_record(
                 "status": f"missing compulsory field"
             }
             return JSONResponse(status_code=500,content=resp_json)
-    elif table == 'smpp_account':
+    elif table == 'account':
         try:
-            data_obj = models.UpdateSMPPAccount(**args.dict()) #convert into defined model, removing useless field
+            data_obj = models.UpdateAccount(**args.dict()) #convert into defined model, removing useless field
         except:
             resp_json = {
                 "errorcode":2,
