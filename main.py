@@ -254,9 +254,8 @@ async def create_campaign(
     # cpg_tpoa: str
     # cpg_xms: str
     # billing_id: int
-    # webuser_id: int
+    # account_id: int
     # product_id: int
-    # api_credential_id: int
     logger.info(f"{request.url.path}: from {request.client.host}")
     
     blast_list = arg_new_cpg.blast_list
@@ -270,16 +269,15 @@ async def create_campaign(
         tpoa = arg_new_cpg.cpg_tpoa
         xms = arg_new_cpg.cpg_xms
         billing_id = arg_new_cpg.billing_id
-        webuser_id = arg_new_cpg.webuser_id
+        account_id = arg_new_cpg.account_id
         product_id = arg_new_cpg.product_id
-        api_credential_id = arg_new_cpg.api_credential_id
 
         cpg_name = re.sub(r"'",r"''",cpg_name)
         tpoa = re.sub(r"'",r"''",tpoa)
         xms = re.sub(r"'",r"''",xms)
 
-        sql = f"""insert into cpg (name,tpoa,billing_id,webuser_id,product_id,xms,api_credential_id) values 
-                ('{cpg_name}','{tpoa}',{billing_id},{webuser_id},{product_id},'{xms}',{api_credential_id}) returning id;"""
+        sql = f"""insert into cpg (name,tpoa,billing_id,account_id,product_id,xms) values 
+                ('{cpg_name}','{tpoa}',{billing_id},{account_id},{product_id},'{xms}') returning id;"""
         logger.debug(sql)
         cur.execute(sql)
         cpg_id = cur.fetchone()[0]
@@ -524,12 +522,25 @@ async def get_all_billing_accounts():
             "live": live
         }
         l_data.append(d)
-    # except:
-    #     resp_json = {
-    #         "errorcode": 1,
-    #         "status":"Users Not found!"
-    #     }
-    #     return JSONResponse(status_code=404, content=resp_json)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "count": len(l_data),
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":f"Account Not found"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
 @app.get("/api/internal/billing/{billing_id}") # get billing account info
 async def get_billing_account_info(billing_id: int):
     cur.execute(f"""
@@ -643,8 +654,8 @@ def get_all_accounts():
     
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.get("/api/internal/users/")#get all webuser (related to billing accounts)
-def get_all_webuser():
+@app.get("/api/internal/webuser/")#get all webusers
+def get_all_webusers():
     cur.execute(f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.id as billing_id,b.company_name,u.role_id,r.name as role_name,
     u.live from webuser u join billing_account b on u.billing_id=b.id join webrole r on r.id=u.role_id where u.deleted=0;""")
 
@@ -682,7 +693,7 @@ def get_all_webuser():
     
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.get("/api/internal/users/{billing_id}")#get all webuser (related to billing accounts)
+@app.get("/api/internal/webuser/{billing_id}")#get all webuser of one billing account
 def get_webusers_by_billing_id(billing_id:int):
     cur.execute(f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.company_name,u.role_id,r.name as role_name,
     u.live from webuser u join billing_account b on u.billing_id=b.id join webrole r on r.id=u.role_id 
@@ -772,7 +783,7 @@ async def insert_record(
             }
             return JSONResponse(status_code=500,content=resp_json)
         
-        # if billing_email is provided, check if email is valid, comma seprated email
+        # if billing_email is provided, check if email is valid, comma separated email, will not check uniqueness of email
         if data_obj.billing_email: #email not null
             emails = data_obj.billing_email.split(',')
             for email in emails:
@@ -785,23 +796,7 @@ async def insert_record(
                     }
                     return JSONResponse(status_code=422,content=resp_json)
                     break
-    
-    # elif table == 'api_credential':
-    #         ## compulsory field
-    #         # api_key: str
-    #         # api_secret: str
-    #         # webuser_id: int
-    #         # product_id: int
-    #         # billing_id: int
-    #     try:
-    #         data_obj = models.InsertAPICredential(**args.dict()) #convert into defined model, removing useless field
-    #     except:
-    #         resp_json = {
-    #             "errorcode":2,
-    #             "status": f"missing compulsory field"
-    #         }
-    #         return JSONResponse(status_code=500,content=resp_json)
-
+            
     elif table == 'webuser': 
             ## compulsory field
             # username: str
@@ -1043,16 +1038,6 @@ async def update_record(
                     }
                     return JSONResponse(status_code=422,content=resp_json)
                     break
-    
-    # elif table == 'api_credential':
-    #     try:
-    #         data_obj = models.UpdateAPICredential(**args.dict()) #convert into defined model, removing useless field
-    #     except:
-    #         resp_json = {
-    #             "errorcode":2,
-    #             "status": f"missing compulsory field"
-    #         }
-    #         return JSONResponse(status_code=500,content=resp_json)
 
     elif table == 'webuser': 
         try:
@@ -1161,44 +1146,6 @@ async def get_password_hash(args: models.PasswordHashRequest):
     }
     return JSONResponse(content=resp_json)
 
-@app.get("/api/internal/users/{billing_id}", response_model=models.GetUsersResponse,
-        responses={404: {"model": models.MsgNotFound}})
-async def get_users_by_billing_id(billing_id:int):
-    cur.execute(f"""select u.id, username,email,bnumber,role_id,webrole.name as role_name,live from webuser u 
-                    join billing_account b on u.billing_id=b.id 
-                    join webrole on webrole.id=u.role_id where b.id={billing_id} and  u.deleted=0;""")
-
-    rows = cur.fetchall()
-    l_data = list()
-    for row in rows:
-        (webuser_id,username,email,bnumber,role_id,role_name,live) = row
-        d = {
-            "id": webuser_id,
-            "username": username,
-            "email": email,
-            "bnumber": bnumber,
-            "role_id": role_id,
-            "role_name": role_name,
-            "live": live,
-        }
-        l_data.append(d)
-    
-    resp_json = dict()
-
-    if len(l_data) > 0:
-        resp_json = {
-            "errorcode":0,
-            "status": "Success",
-            "results": l_data
-        }
-    else:
-        resp_json = {
-            "errorcode": 1,
-            "status":"Users Not found!"
-        }
-        return JSONResponse(status_code=404, content=resp_json)
-    
-    return JSONResponse(status_code=200, content=resp_json)
 
 @app.get("/api/internal/audit/{billing_id}", response_model=models.GetAuditResponse,
         responses={404: {"model": models.MsgNotFound}})

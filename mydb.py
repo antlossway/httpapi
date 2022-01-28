@@ -77,27 +77,25 @@ except:
 # for k,v in g_userinfo.items():
 #     print(k,v)
 
-cur.execute("""select a.id,api_key,api_secret, b.id as billing_id, b.company_name, webuser_id, w.username as webuser_name,product_id,
-     p.name as product_name, callback_url from api_credential a join webuser w on w.id=a.webuser_id
-     join billing_account b on w.billing_id = b.id join product p on p.id=a.product_id;""")
+cur.execute("""select a.api_key,a.api_secret,a.id as account_id, a.billing_id, b.company_name,a.product_id,
+p.name as product_name,a.callback_url from account a join billing_account b on a.billing_id=b.id 
+join product p on a.product_id=p.id where a.connection_type='http';""")
 rows = cur.fetchall()
 for row in rows:
-    (api_credential_id,api_key,api_secret,billing_id,company_name,webuser_id,webuser_name,product_id,product_name, callback_url) = row
+    (api_key,api_secret,account_id,billing_id,company_name,product_id,product_name, callback_url) = row
     ac = {
         "api_key": api_key,
         "api_secret": api_secret,
+        "account_id": account_id,
         "billing_id": billing_id,
         "company_name": company_name,
-        "webuser_id": webuser_id,
-        "webuser_name": webuser_name,
         "product_id": product_id,
         "product_name": product_name,
-        "callback_url": callback_url,
-        "api_credential_id": api_credential_id
+        "callback_url": callback_url
     }
     g_account[api_key] = ac
 
-logger.info("### print all ap_credentials")
+logger.info("### print all http account api credentials")
 for api_key,ac in g_account.items():
     logger.info(f" - {api_key}")
     logger.info(json.dumps(ac, indent=4))

@@ -66,16 +66,16 @@ def myauth_basic(credentials: HTTPBasicCredentials = Depends(security)):
     logger.debug(f"debug: {credentials}")
 
     ac = g_account.get(credentials.username,None) #dict
-    #     ac = {
-    #     "api_key": api_key,
-    #     "api_secret": api_secret,
-    #     "billing_id": billing_id,
-    #     "company_name": company_name,
-    #     "webuser_id": webuser_id,
-    #     "webuser_name": webuser_name,
-    #     "product_id": product_id,
-    #     "product_name": product_name
-    #     }
+#        ac = {
+#        "api_key": api_key,
+#        "api_secret": api_secret,
+#        "account_id": account_id,
+#        "billing_id": billing_id,
+#        "company_name": company_name,
+#        "product_id": product_id,
+#        "product_name": product_name,
+#        "callback_url": callback_url
+#        }
 
     if ac:
         expected_secret = ac.get('api_secret',None)

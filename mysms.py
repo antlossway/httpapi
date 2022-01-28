@@ -185,17 +185,17 @@ def create_sms_ameex(ac,data,provider):
 
 ## call HTTP API on a2p server
 def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict includes sms info
-    #     ac = {
-    #     "api_key": api_key,
-    #     "api_secret": api_secret,
-    #     "billing_id": billing_id,
-    #     "company_name": company_name,
-    #     "webuser_id": webuser_id,
-    #     "webuser_name": webuser_name,
-    #     "product_id": product_id,
-    #     "product_name": product_name,
-    #     "api_credential_id": api_credential_id
-    #     }
+#        ac = {
+#        "api_key": api_key,
+#        "api_secret": api_secret,
+#        "account_id": account_id,
+#        "billing_id": billing_id,
+#        "company_name": company_name,
+#        "product_id": product_id,
+#        "product_name": product_name,
+#        "callback_url": callback_url
+#        }
+
 
     #     data = {
     #     "msgid": msgid,
@@ -211,10 +211,9 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     # }
 
     logger.info(f"debug: account {ac}")
-    webuser_id = ac.get('webuser_id')
+    account_id = ac.get('account_id')
     billing_id = ac.get('billing_id')
     product_id = ac.get('product_id')
-    api_credential_id = ac.get('api_credential_id')
 
     error = 0
     msgid = data.get('msgid')
@@ -239,13 +238,13 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
     if create_error == 0 and msgid2 != None and msgid2 != '': #SMS successfully submitted to provider
         #record into redis cdr_cache
         if cpg_id != 0:
-            sql = f"""insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,
-            dcs,len,udh,xms,cpg_id,api_credential_id) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
-            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',{cpg_id},{api_credential_id});"""
+            sql = f"""insert into cdr (account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,
+            dcs,len,udh,xms,cpg_id) values ({account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',
+            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',{cpg_id});"""
         else:
-            sql = f"""insert into cdr (webuser_id,billing_id,product_id,msgid,notif3_msgid,tpoa,bnumber,country_id,operator_id,
-            dcs,len,udh,xms,api_credential_id) values ({webuser_id},{billing_id},{product_id},'{msgid}','{msgid2}','{sender}','{bnumber}',
-            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',api_credential_id);"""
+            sql = f"""insert into cdr (account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,
+            dcs,len,udh,xms) values ({account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',
+            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}');"""
 
         logger.info(sql)
         if mydb.r.lpush('cdr_cache',sql): #successful transaction return True
