@@ -452,7 +452,7 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
     # check if username exists
     cur.execute("""select u.id as webuser_id,username,password_hash,email,bnumber,role_id,webrole.name as role_name,
     billing_id,b.billing_type,b.company_name,b.company_address,b.country,b.city,b.postal_code,b.currency from webuser u
-        left join billing_account b on u.billing_id=b.id left join webrole on u.role_id=webrole.id where username=%s and deleted=0
+        left join billing_account b on u.billing_id=b.id left join webrole on u.role_id=webrole.id where username=%s and u.deleted=0
         """, (arg_login.username,))
     row = cur.fetchone()
     if row:
@@ -498,7 +498,39 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.get("/api/billing/{billing_id}") # get billing account info
+@app.get("/api/internal/billing/") # get all billing accounts
+async def get_all_billing_accounts():
+    cur.execute(f"""
+    select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
+    contact_number,billing_type,currency,live from billing_account""")
+
+    l_data = list()
+    rows = cur.fetchall()
+    for row in rows:
+        (billing_id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
+        contact_number,billing_type,currency,live) = row
+        d = {
+            "billing_id": billing_id,
+            "company_name": company_name,
+            "company_address": company_address,
+            "country": country,
+            "city": city,
+            "postal_code": postal_code,
+            "contact_name": contact_name,
+            "billing_email": billing_email,
+            "contact_number": contact_number,
+            "billing_type": billing_type,
+            "currency": currency,
+            "live": live
+        }
+        l_data.append(d)
+    # except:
+    #     resp_json = {
+    #         "errorcode": 1,
+    #         "status":"Users Not found!"
+    #     }
+    #     return JSONResponse(status_code=404, content=resp_json)
+@app.get("/api/internal/billing/{billing_id}") # get billing account info
 async def get_billing_account_info(billing_id: int):
     cur.execute(f"""
     select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
