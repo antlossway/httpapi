@@ -17,6 +17,7 @@ import re
 import random
 import site
 from collections import defaultdict
+import json
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 libdir = os.path.join(basedir, "../pylib")
@@ -32,6 +33,7 @@ except:
 instance = os.path.basename(__file__).split(".")[0]
 log = os.path.join(basedir, f"../log/{instance}.log")
 lockfile= os.path.join(basedir, f"../var/lock/{instance}.lock")
+trash_dir = os.path.join(basedir, "../trash")
 
 ##########################
 #### configure logger ####
@@ -63,13 +65,19 @@ if not r:
     exit()
 
 batch = 2
-d_ac = dict() #keep smpp_account info
+d_ac = dict() # id => name
+d_smpp_ac = dict() #keep smpp account info, id => name---billing_id---product_id---directory
+d_http_ac = dict() #keep http account info, id => name---billing_id---product_id---api_key
 d_customer_operator_routing = dict()
-d_provider = dict()
-d_smsc = dict()
-d_smsc_dir = dict()
+d_provider = dict() #id => name
+d_smsc = dict() # id => name
+d_smsc_dir = dict() # id => directory
+d_smsc_provider = dict() # smsc_id => provider_id
 d_provider_smsc = defaultdict(list) #provider_id => [smsc_id1, smsc_id2]
-
+d_country = dict()
+d_operator = dict()
+np = DB.get_numbering_plan(cur) #numbering_plan
+logger.info(f"numbering_plan entry {len(np)}")
 
 #### regex to match key info in SMS file
 r_bnumber = re.compile("^Phone=(.*)")
@@ -99,19 +107,25 @@ def print_dict(data,name):
 def read_config():
 
     logger.info("======= read_config =======")
-    sql = f"select id,name,billing_id,directory,product_id from smpp_account where live=1;"
+    sql = f"select id,name,billing_id,product_id,connection_type,directory,api_key from account where live=1;"
     cur.execute(sql)
     rows = cur.fetchall()
     if rows:
         d_ac.clear() #reset d_ac
+        d_smpp_ac.clear()
+        d_http_ac.clear()
 
         for row in rows:
-            (acid,acname,billing_id,in_dir,product_id) = row
-            d_ac[acid] = f"{acname}---{billing_id}---{in_dir}---{product_id}"
+            (acid,acname,billing_id,product_id,conn_type,in_dir,api_key) = row
+            d_ac[acid] = acname
+            if conn_type == 'smpp':
+                d_smpp_ac[acid] = f"{acname}---{billing_id}---{product_id}---{in_dir}"
+            else:
+                d_http_ac[acid] = f"{acname}---{billing_id}---{product_id}---{api_key}"
     else:
-        logger.warning("!!! query table smpp_account return empty result, keep existing data")
+        logger.warning("!!! query table account return empty result, keep existing data")
 
-    print_dict(d_ac,'smpp_account')
+    print_dict(d_smpp_ac,'smpp account')
 
     sql = f"select product_id,country_id,operator_id,provider_id from customer_operator_routing;"
     cur.execute(sql)
@@ -127,36 +141,62 @@ def read_config():
     print_dict(d_customer_operator_routing,'customer_operator_routing')
     
 
-    sql = f"select id,name from provider")
+    sql = f"select id,name from provider;"
     cur.execute(sql)
     rows = cur.fetchall()
     if rows:
         d_provider.clear()
-        (provider_id,provider_name) = row
-        d_provider[provider_id] = provider_name
+        for row in rows:
+            (provider_id,provider_name) = row
+            d_provider[provider_id] = provider_name
     else:
         logger.warning("!!! query table provider return empty result, keep existing data")
     print_dict(d_provider,'provider')
 
+    sql = f"select id,name from countries;"
+    cur.execute(sql)
+    rows = cur.fetchall()
+    if rows:
+        d_country.clear()
+        for row in rows:
+            (id,name) = row
+            d_country[id] = name
+    else:
+        logger.warning("!!! query table countries return empty result, keep existing data")
+    print_dict(d_country,'countries')
 
-    sql = f"select id,name,provider_id,directory from smsc")
+    sql = f"select id,name from operators;"
+    cur.execute(sql)
+    rows = cur.fetchall()
+    if rows:
+        d_operator.clear()
+        for row in rows:
+            (id,name) = row
+            d_operator[id] = name
+    else:
+        logger.warning("!!! query table operators return empty result, keep existing data")
+    print_dict(d_operator,'operators')
+
+    sql = f"select id,name,provider_id,directory from smsc"
     cur.execute(sql)
     rows = cur.fetchall()
     if rows:
         d_smsc.clear()
         d_provider_smsc.clear()
 
-        (smsc_id,smsc_name,provider_id,directory) = row
-        d_smsc[smsc_id] = smsc_name
-        d_smsc_dir[smsc_id] = directory
-        d_provider_smsc[provider_id].append[smsc_id]
-        d_smsc_provider[smsc_id] = provider_id
+        for row in rows:
+            (smsc_id,smsc_name,provider_id,directory) = row
+            d_smsc[smsc_id] = smsc_name
+            d_smsc_dir[smsc_id] = directory
+            d_provider_smsc[provider_id].append(smsc_id)
+            d_smsc_provider[smsc_id] = provider_id
     else:
         logger.warning("!!! query table smsc return empty result, keep existing data")
     print_dict(d_smsc,'smsc')
     print_dict(d_smsc_dir,'smsc_dir')
     print_dict(d_provider_smsc,'provider_smsc mapping')
     print_dict(d_smsc_provider,'smsc_provider mapping')
+
 
     logger.info("===============================")
 
@@ -186,9 +226,8 @@ def save_sql(sql):
         logger.warning(f"!!! problem to LPUSH cdr_cache {sql}")
 
 def scandir(acid):
-    acname,billing_id,in_dir,product_id = d_ac.get(acid).split("---")
+    acname,billing_id,product_id,in_dir = d_smpp_ac.get(acid).split("---")
     e = Path(in_dir)
-    logger.info(f"scan dir for {acname}({acid}) {in_dir}")
 
     count = 0
     for myfile in e.iterdir():
@@ -205,6 +244,7 @@ def get_route(product_id,cid,opid):
     #return "1---6---/home/xqy/dev/python3/fastapi/httpapi/sendxms/CMI_PREMIUM1/spool/CMI_PREMIUM1"
 
     ### product_id---country_id---operator_id => provider_id
+    pattern_default = f"4---4---4"
     pattern_all = f"{product_id}---4---4"
     pattern_c_all = f"{product_id}---{cid}---4"
     pattern_op = f"{product_id}---{cid}---{opid}"
@@ -213,16 +253,26 @@ def get_route(product_id,cid,opid):
         provider_id = d_customer_operator_routing.get(pattern_op)
     elif pattern_c_all in d_customer_operator_routing:
         provider_id = d_customer_operator_routing.get(pattern_c_all)
-    else:
+    elif pattern_all in d_customer_operator_routing:
         provider_id = d_customer_operator_routing.get(pattern_all)
+    else:
+        provider_id = d_customer_operator_routing.get(pattern_default)
+
+    logger.info(f"get_route find provider {d_provider.get(provider_id)} ({provider_id}) for {d_country.get(cid)}/{d_operator.get(opid)}")
 
     ### distribute to smsc
-    smsc_id = random.choices(d_provider_smsc.get(provider_id))
+    smsc_id = random.choice(d_provider_smsc.get(provider_id))
+    logger.info(f"get_route pick smsc {d_smsc.get(smsc_id)} ({smsc_id})")
 
     return smsc_id
 
+def generate_dlr():
+    ### TBD
+    logger.info("TBD: generate reject DLR")
+    pass
+
 def process_file(myfile,acid):
-    acname,billing_id,in_dir,product_id = d_ac.get(acid).split("---")
+    acname,billing_id,product_id,in_dir = d_smpp_ac.get(acid).split("---")
 
     bnumber,msgid,xms,tpoa,udh,action = '','','','','',''
     dcs,error,split = 0,0,1
@@ -236,43 +286,58 @@ def process_file(myfile,acid):
         for line in reader: #same as: for line in reader.readlines():
             line = line.strip()
             logger.info(line)
-            if(z := r_xms.match(line)):
-                xms = z.groups()[0]
-            elif(z := r_bnumber.match(line)):
-                bnumber = z.groups()[0]
-            elif(z := r_tpoa.match(line)):
-                tpoa = z.groups()[0]
+            #if(z := r_xms.match(line)):
+                #xms = z.groups()[0]
+            if r_xms.match(line):
+                xms = r_xms.match(line).groups()[0]
+            elif r_bnumber.match(line):
+                bnumber = r_bnumber.match(line).groups()[0]
+            elif r_tpoa.match(line):
+                tpoa = r_tpoa.match(line).groups()[0]
                 tpoa = re.sub(r'^\d:\d:',r'',tpoa).strip() # 5:0:Routee => Routee
-            elif(z := r_udh.match(line)):
-                udh = z.groups()[0]
-            elif(z := r_dcs.match(line)):
-                dcs = z.groups()[0]
-            elif(z := r_msgid.match(line)):
-                msgid = z.groups()[0]
-            elif(z := r_split.match(line)):
-                split = z.groups()[0]
-            elif(z := r_action.match(line)):
-                action = z.groups()[0]
+            elif r_udh.match(line):
+                udh = r_udh.match(line).groups()[0]
+            elif r_dcs.match(line):
+                dcs = r_dcs.match(line).groups()[0]
+            elif r_msgid.match(line):
+                msgid = r_msgid.match(line).groups()[0]
+            elif r_split.match(line):
+                split = r_split.match(line).groups()[0]
+            elif r_action.match(line):
+                action = r_action.match(line).groups()[0]
 
     logger.info("=========================")
 
     bnumber = clean_bnumber(bnumber)
- 
+    #print(f"debug: numbering_plan has {len(np)} entries")
+    result = DB.parse_bnumber(np, bnumber)
+    if result == None:
+        logger.info(f"!!! {bnumber} does not belong to any network")
+        ### delete file
+        os.remove(myfile)
+        generate_dlr()
+        return 0
+    else:
+        cid,opid = result.split('---')
+        cid = int(cid)
+        opid = int(opid)
+
+
     xms_len = len(xms)
 
     #### trash DLR , only process MO
     if action == 'Status':
         logger.info(f"!!! trash DLR")
         to_trash = 1
+        outfile = os.path.join(trash_dir, os.path.basename(myfile))
     else:
-        route = get_route()
-
-    smscid,providerid,outdir = route.split('---')
-    smscid = int(smscid)
-    providerid = int(providerid)
-    outfile = os.path.join(outdir, os.path.basename(myfile))
-    tmpdir = outdir + '/tmp'
-    tmpsms = tmpdir + '/' + os.path.basename(myfile) 
+        smsc_id = get_route(product_id,cid,opid)
+        smsc_name = d_smsc.get(smsc_id)
+        provider_id = d_smsc_provider.get(smsc_id)
+        outdir = d_smsc_dir.get(smsc_id)
+        tmpdir = outdir + '/tmp'
+        outfile = os.path.join(outdir, os.path.basename(myfile))
+        tmpsms = os.path.join(tmpdir, os.path.basename(myfile))
     
     if to_trash == 1:
         os.rename(myfile,outfile)
@@ -284,7 +349,7 @@ def process_file(myfile,acid):
     
         msg_submit = f"""\
 ; encoding=UTF-8
-[{acname.upper()}]
+[{smsc_name.upper()}]
 Phone={bnumber}
 OriginatingAddress={tpoa}
 Priority=0
@@ -307,19 +372,13 @@ StatusReportRequest=1
         os.rename(tmpsms,outfile)
         logger.info(f"rename {tmpsms} to {outfile}")
 
-        #result = DB.parse_bnumber(np, tpoa)
-        result = "3---408"
-        if result == None:
-            logger.info(f"!!! parse_bnumber can not find {bnumber} belong to which network")
-        else:
-            cid,opid = result.split('---')
-        
+       
         #treat single quote before inserting to postgresql
         tpoa = re.sub("'","''",tpoa)
         xms = re.sub("'","''",xms)
         xms = xms[:400]
   
-        save_sql(f"insert into cdr (msgid,billing_id,product_id,smpp_account_id,tpoa,bnumber,country_id,operator_id,dcs,len,split,udh,provider_id,smsc_id,xms) values ('{msgid}',{billing_id},{product_id},{acid},'{tpoa}','{bnumber}',{cid},{opid},{dcs},{xms_len},{split},'{udh}',{providerid},{smscid},'{xms}')")
+        save_sql(f"insert into cdr (msgid,account_id,billing_id,product_id,tpoa,bnumber,country_id,operator_id,dcs,len,split,udh,provider_id,smsc_id,xms) values ('{msgid}',{acid},{billing_id},{product_id},'{tpoa}','{bnumber}',{cid},{opid},{dcs},{xms_len},{split},'{udh}',{provider_id},{smsc_id},'{xms}')")
 
     return 1
     
@@ -374,9 +433,10 @@ def main():
             ### get sms from redis
             pass
         else:
-            for acid,info in d_ac.items():
+            for acid in d_smpp_ac.keys():
                 if show_alive == 1:
-                    logger.info(f"scandir for acid {acid}")
+                    acname,billing_id,product_id,in_dir = d_smpp_ac.get(acid).split("---")
+                    logger.info(f"scandir for {acname}({acid}) {in_dir}")
                 scandir(acid)
             
             time.sleep(1)

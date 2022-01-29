@@ -196,7 +196,8 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
     return JSONResponse(status_code=200, content=resp_json)
 
 
-@app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
+#@app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
+@app.post('/api/callback_dlr', status_code=200) # to receive push DLR from providers, don't expose in API docs
 async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
     logger.info(f"{request.url.path}: from {request.client.host}")
     d_dlr = arg_dlr.dict()

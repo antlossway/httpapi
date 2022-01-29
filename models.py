@@ -27,12 +27,12 @@ class SMSResponse(BaseModel):
     messages: List[Msg]
 
 class CallbackDLR(BaseModel):
-    msisdn: str
-    msgid: str
-    status: str
-    to: Optional[str]
-    timestamp: Optional[str]
-
+    msisdn: str = Field(example='658712371')
+    to: Optional[str] = Field(example='INFO')
+    msgid: str = Field(example="EOURQwerewrhoi23")
+    status: str = Field(example="DELIVERD")
+    #dlr_timestamp: Optional[str] = Field(alias="dlr-timestamp", example="2022-01-29 00:00")
+    timestamp: Optional[str] = Field(example="2022-01-29 00:00")
 
 class InternalNewCampaign(BaseModel):
     blast_list: List[str]

@@ -78,17 +78,22 @@ def clean_msisdn(msisdn):
     return number
 
 def parse_bnumber(np,msisdn):
-  result = None
-  while len(msisdn) > 0:
-    if msisdn in np.keys():
-      result = np[msisdn]
-      break
-    else:
-      msisdn = msisdn[:-1]  #remove last digit
-  return result
+    result = None
+    while len(msisdn) > 0:
+        #print(f"debug: parse_bnumber: {msisdn}")
+        if msisdn in np.keys():
+            result = np[msisdn]
+            break
+        else:
+            msisdn = msisdn[:-1]  #remove last digit
+    return result
 
 
 if __name__ == '__main__':
    db = connectdb() 
    print("DB connected")
+   cur = db.cursor()
+   np = get_numbering_plan(cur)
+   result = parse_bnumber(np, "+6586294138")
+   print(result)
    db.close()
