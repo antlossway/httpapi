@@ -503,3 +503,50 @@ example_traffic_report_request = {
         },
     },
 }
+
+class TransactionRequest(BaseModel):
+    start_date: Optional[str] ## default past 7 days
+    end_date: Optional[str]
+    billing_id: Optional[int]
+    account_id: Optional[int]
+    msgid: Optional[str]
+    bnumber: Optional[str]
+
+example_transaction_report_request = {
+    "specify account_id":{
+        "value": {
+            "start_date": "2022-01-23",
+            "end_date": "2022-01-30",
+            "account_id": 10003
+        },
+    },
+    "specify billing_id":{
+        "value": {
+            "billing_id": 1
+        },
+    },
+    "specify msgid":{
+        "value": {
+            "msgid": "351a8acd-d6f5-4129-a4e4-95d6577f81ec"
+        },
+    },
+    "specify bnumber":{
+        "value": {
+            "start_date": "2022-01-23",
+            "end_date": "2022-01-30",
+            "bnumber": "+6544946163"
+        },
+    },
+    "specify bnumber and billing_id (only show record for this billing_id)":{
+        "value": {
+            "account_id": 10003,
+            "bnumber": "+6544946163"
+        },
+    },
+    "specify bnumber and account_id (only show record for this account_id)":{
+        "value": {
+            "billing_id": 1,
+            "bnumber": "+6544946163"
+        },
+    },
+}

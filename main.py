@@ -1261,3 +1261,83 @@ async def traffic_report(
     
     return JSONResponse(status_code=200, content=resp_json)
     
+@app.post("/api/internal/transaction") #optional arg: billing_id, account_id
+async def transaction_report(
+    args: models.TransactionRequest = Body(
+        ...,
+        examples = models.example_transaction_report_request,
+    ),
+):
+    d_arg = args.dict()
+    msgid = d_arg.get("msgid")
+    bnumber = d_arg.get("bnumber")
+    billing_id = d_arg.get("billing_id")
+    account_id = d_arg.get("account_id")
+    start_date = d_arg.get("start_date",None)
+    end_date = d_arg.get("end_date",None)
+
+    if msgid:
+        sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
+                status,xms,udh from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where msgid='{msgid}' """
+    else:
+        if not start_date or not end_date: #default return past 7 days traffic
+            sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
+                    status,xms,udh from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where dbtime > current_timestamp - interval '7 days' """
+        else:
+            sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
+                    status,xms,udh from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where dbtime between '{start_date}' and '{end_date}' """
+    
+        if account_id:
+            sql += f"and cdr.account_id = {account_id}"
+        elif billing_id:
+            sql += f"and cdr.billing_id = {billing_id}"
+
+        if bnumber:
+            bnumber = mysms.clean_msisdn(bnumber)
+            sql += f"and cdr.bnumber = '{bnumber}'"
+    
+        sql += "order by dbtime desc limit 100;"""
+
+    logger.info(sql)
+    
+    l_data = list()
+    cur.execute(sql)
+    rows = cur.fetchall()
+    for row in rows:
+        (ts,company_name,account_name,msgid,tpoa,bnumber,country,operator,status,xms,udh) = row
+        ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
+        d = {
+            "timestamp": ts,
+            "company_name": company_name,
+            "account_name": account_name,
+            "msgid": msgid,
+            "tpoa": tpoa,
+            "bnumber": bnumber,
+            "country": country,
+            "operator": operator,
+            "status": status,
+            "xms": xms,
+            "udh": udh
+        }
+
+        l_data.append(d)
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode" : 0,
+            "status": "Success",
+            "count": len(l_data),
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"No Record found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+ 
