@@ -30,7 +30,7 @@ try:
 except:
     pass
 
-instance = os.path.basename(__file__).split(".")[0] + ext
+instance = os.path.basename(__file__).split(".")[0] + '-' + ext
 log = os.path.join(basedir, f"../log/{instance}.log") #/home/amx/log/qrouter.log
 lockfile= os.path.join(basedir, f"../var/lock/{instance}.lock")
 trash_dir = os.path.join(basedir, "../trash")
