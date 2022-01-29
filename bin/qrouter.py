@@ -19,7 +19,7 @@ import site
 from collections import defaultdict
 import json
 
-basedir = os.path.abspath(os.path.dirname(__file__))
+basedir = os.path.abspath(os.path.dirname(__file__)) #/home/amx/bin/
 libdir = os.path.join(basedir, "../pylib")
 site.addsitedir(libdir)
 import DB
@@ -30,8 +30,8 @@ try:
 except:
     pass
 
-instance = os.path.basename(__file__).split(".")[0]
-log = os.path.join(basedir, f"../log/{instance}.log")
+instance = os.path.basename(__file__).split(".")[0] + ext
+log = os.path.join(basedir, f"../log/{instance}.log") #/home/amx/log/qrouter.log
 lockfile= os.path.join(basedir, f"../var/lock/{instance}.lock")
 trash_dir = os.path.join(basedir, "../trash")
 

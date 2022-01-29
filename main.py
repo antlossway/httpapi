@@ -213,7 +213,7 @@ async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
     bnumber = "+" + bnumber #add back beginning +
 
     #query redis MSGID2:msgid2 => msgid1:::api_key:::require_dlr
-    msg_info = r.get(f"MSGID2:{msgid2}")
+    msg_info = r.get(f"MSGID2:{msgid2}") #this is inserted by script who take care posting SMS to HTTP provider's interface
     
     if msg_info:
         msg_info = msg_info.decode("utf-8") # result from redis-server is byte, need to convert to str
@@ -920,8 +920,8 @@ async def insert_record(
         systemid = f"{re.sub(r'_$','',systemid)}_{ext}"
         subdir = systemid.upper()
         basedir = os.path.abspath(os.path.dirname(__file__))
-        directory = os.path.join(basedir, f"sendxms/SERVER_SUPER100/received/{subdir}")
-        notif3_dir = os.path.join(basedir, f"sendxms/SERVER_SUPER100/spool/{subdir}")
+        directory = os.path.join(basedir, f"../sendxms/SERVER_SUPER100/received/{subdir}") #/home/amx/sendxms/SERVER_SUPER100
+        notif3_dir = os.path.join(basedir, f"../sendxms/SERVER_SUPER100/spool/{subdir}")
         d_data['directory'] = directory
         d_data['notif3_dir'] = notif3_dir 
         ## create systemid, password
