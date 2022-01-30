@@ -14,6 +14,9 @@ import signal
 from itertools import repeat
 import re
 from configparser import ConfigParser
+import random
+import smsutil
+from uuid import uuid4
 
 import site
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -43,6 +46,9 @@ config = read_config(cfg)
 master_key = config['api_test']['api_key']
 master_secret = config['api_test']['api_secret']
 
+notif1_expire = 4*24*3600
+sms_expire = 3*24*3600 #redis HTTPSMS:{msgid}
+
 #####################
 ## log configuration 
 #####################
@@ -65,6 +71,12 @@ try:
     logger.info("postgreSQL DB connected")
 except Exception as error:
     logger.warning(f"!!! DB connection failed: {error}")
+    exit()
+try:
+    r = DB.connect_redis()
+    logger.info("redis connected")
+except Exception as error:
+    logger.warning(f"!!! redis connection failed: {error}")
     exit()
 
 numbering_plan = DB.get_numbering_plan(cur)
@@ -96,39 +108,105 @@ def get_cpg_list(cur,cpg_id):
         d[md5][field] = value
 
     return d
+
+#### same as in API mysms.py
+def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms info
+#        ac = {
+#        "api_key": api_key,
+#        "account_id": account_id,
+#        "billing_id": billing_id,
+#        "product_id": product_id,
+#        }
+
+#            data = {
+#            "msgid": msgid,
+#            "sender": sender,
+#            "to": msisdn,
+#            "content": xms,
+#            "udh": udh
+#            "dcs": dcs 
+#            "require_dlr": 0 # campaign
+#            "cpg_id": cpg_id # campaign
+#            }
+
+    logger.info(f"### create_sms debug: account")
+    logger.info(json.dumps(ac, indent=4))
+    logger.info(f"### create_sms debug: sms")
+    logger.info(json.dumps(data, indent=4))
+
+    api_key = ac.get('api_key')
+
+    error = 0
+
+    with r.pipeline() as pipe:
+        ### lpush redis list HTTPIN:{api_key}: {msgid}
+        redis_list = f"HTTPIN:{api_key}"
+        r.lpush(redis_list, msgid)
+        logger.info(f"##add msgid in list redis: LPUSH {redis_list} {msgid}")
         
-def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac: account related info {'billing_id':xxx, 'product_id':xxx}
-    tid = str(threading.get_ident()) #thread id
+        ### sms: hset redis HASH index HTTPSMS:{msgid}: 
+        index = f"HTTPSMS:{msgid}"
+        for k,v in data.items():
+            r.hset(index,k,v)
+            logger.info(f"## add SMS detail in redis: HSET {index} {k} {v}")
+        r.expire(name=index, time=sms_expire) #expire in 3 days
+        logger.info(f"#### redis: EXPIRE {index} {sms_expire}")
+ 
+        ### notif1: hset redis HASH
+        index_notif1 = f"{bnumber}:::{msgid}"
+        value = f"HTTP:::{api_key}"
+        r.hset(index_notif1,"CUSTOMER",value)
+        logger.info(f"## record notif1 in redis: HSET {index_notif1} CUSTOMER {value}")
+        r.expire(name=index_notif1, time=notif1_expire)
+        logger.info(f"#### redis: EXPIRE {index_notif1} {notif1_expire}")
 
-    logger.info(f"[{tid}]: process SMS {json.dumps(d,indent=4)}, {json.dumps(d_ac,indent=4)}")
+        pipe.execute()
+  
+    return error
 
-    #### get bnumber
+def gen_udh_base():
+        rand1 = random.randint(0,15)
+        rand2 = random.randint(0,15)
+
+        udh_base = "0003" + format(rand1,'X') + format(rand2, 'X')
+        return udh_base
+def gen_udh(udh_base,split,i):
+    return udh_base + format(split,'02d') + format(i,'02d')
+       
+def send_sms(d, d_ac): #for each entry of blast list, create a SMS
+    # d: dict = {
+    #       'number':'6512355566',
+    #       'var1':'variable'
+    #}
+
+#    d_ac = {
+#       'billing_id': billing_id,
+#       'account_id': account_id,
+#       'product_id': product_id,
+#       'api_key': api_key,
+#       'sender':sender,
+#       'xms': xms,
+#       'cpg_id': cpg_id
+#    }
+# 
+    logger.info(f"### send_sms debug: bnumber/variable")
+    logger.info(json.dumps(d, indent=4))
+    logger.info(f"### send_sms debug: account/sms")
+    logger.info(json.dumps(d_ac, indent=4))
+
+    #### get bnumber, already cleaned by API /internal/cpg
     bnumber = d.get('number',None)
     if not bnumber: #not supposed to happen
         logger.warning(f"!!! no bnumber found")
         return None
 
-    ### get country_id, operator_id
-    bnumber = DB.clean_msisdn(bnumber)
-    parse_result = DB.parse_bnumber(numbering_plan,bnumber)
-    if parse_result:
-        country_id,operator_id = parse_result.split('---')
-    else:
-        logger.warning(f"!!! unknown destination {bnumber}")
-        return None
-    
-    logger.info(f"bnumber {bnumber}, cid {country_id}, opid {operator_id}")
+    ### parse_bnumber to get country_id, operator_id will be done by qrouter
+    ### routing will be done by qrouter
 
-    ### TBD: find in custome_operator_routing which provider_id to use, and use that provider's connector to send SMS
-    # provider_id = get_provider_id(product_id,country_id,operator_id)
-    #ep = f"https://{master_key}:{master_secret}@dev1.ameex-mobile.com/api/sms"
-
-    ep = f"http://{master_key}:{master_secret}@localhost:8000/api/internal/sms" # call our own post SMS API, which will handle routing and insert cdr
- 
     #del d['number']
     ### replace content template variable if there is any
     xms = d_ac.get('xms')
-    sender = d_ac.get('sender')
+    api_key = d_ac.get('api_key')
     for field,value in d.items():
         pattern = f"%{field}%"
         try:
@@ -137,33 +215,66 @@ def send_sms(d, d_ac): #d: dict {'number':'6512355566','var1':'variable'}, d_ac:
             logger.warning(f"!!! {err}")
     logger.info(f"final SMS content: {xms}")
 
-    data = {
-        "from": sender,
-        "to": bnumber,
-        "content": xms,
-        "cpg_id": d_ac.get("cpg_id"),
-        "account": {
-            "billing_id": d_ac.get("billing_id"),
-            "webuser_id": d_ac.get("webuser_id"),
-            "product_id": d_ac.get("product_id"),
-            "api_credential_id": d_ac.get("api_credential_id")
-        }
-    }
-
-    resp = requests.post(ep,json=data, timeout=(2,10))
-    #resp = requests.post(ep, json=data,verify=True)
-    logger.info("### post SMS request:")
-    logger.info(json.dumps(data,indent=4))
-
-    res_json = resp.json()
+    ### get split info
+    sms = smsutil.split(xms)
+    split = len(sms.parts)
+    encoding = sms.encoding
+    logger.info(f"counts of SMS: {split}")
+    dcs = 0
+    if not encoding.startswith('gsm'): #gsm0338 or utf_16_be
+        dcs = 8 
     
-    logger.info(f"json.dumps(res_json): {json.dumps(res_json,indent=4)}")
+    udh_base = ''
+    udh = ''
 
-    if resp.ok:
-        logger.info(f"resp.text: {resp.text}")
-    else:
-        logger.warning("!!! NOK")
-        logger.info(resp.raise_for_status())
+    if split > 1:
+        udh_base = gen_udh_base()
+        logger.debug(f"gen_udh_base: {udh_base}")
+
+    for i,part in enumerate(sms.parts):
+        content = part.content
+        msgid = str(uuid4())
+
+        if udh_base != '':
+            udh = gen_udh(udh_base,split,i+1)
+            logger.debug(f"gen_udh: {udh}")
+
+        data = {
+            "msgid": msgid,
+            "sender": d_ac.get("sender"),
+            "to": bnumber,
+            "content": content,
+            "dcs": dcs,
+            "cpg_id": d_ac.get("cpg_id")
+        }
+
+
+        if udh:
+            data['udh'] = udh
+    
+        with r.pipeline() as pipe:
+            ### lpush redis list HTTPIN:{api_key}: {msgid}
+            redis_list = f"HTTPIN:{api_key}"
+            r.lpush(redis_list, msgid)
+            logger.info(f"##add msgid in list redis: LPUSH {redis_list} {msgid}")
+            
+            ### sms: hset redis HASH index HTTPSMS:{msgid}: 
+            index = f"HTTPSMS:{msgid}"
+            for k,v in data.items():
+                r.hset(index,k,v)
+                logger.info(f"## add SMS detail in redis: HSET {index} {k} {v}")
+            r.expire(name=index, time=sms_expire) #expire in 3 days
+            logger.info(f"#### redis: EXPIRE {index} {sms_expire}")
+     
+            ### notif1: hset redis HASH
+            index_notif1 = f"{bnumber}:::{msgid}"
+            value = f"HTTP:::{api_key}"
+            r.hset(index_notif1,"CUSTOMER",value)
+            r.hset(index_notif1,"require_dlr",0) #campaign does not need to return DLR
+            logger.info(f"## record notif1 in redis: HSET {index_notif1} CUSTOMER {value}")
+            logger.info(f"## record notif1 in redis: HSET {index_notif1} require_dlr 0")
+            r.expire(name=index_notif1, time=notif1_expire)
+            logger.info(f"#### redis: EXPIRE {index_notif1} {notif1_expire}")
 
 
 def main():
@@ -190,22 +301,21 @@ def main():
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
  
     while True:
-        count = 0
-
         cpg_id = None
         ### select campaign
-        cur.execute("select id,tpoa,xms,billing_id,webuser_id,product_id,api_credential_id from cpg where status = 'TO_SEND' and sending_time < current_timestamp limit 1;")
+        cur.execute("""select cpg.id,cpg.tpoa,cpg.xms,cpg.billing_id,cpg.account_id,cpg.product_id, a.api_key from cpg 
+                    join account a on cpg.account_id = a.id where status = 'TO_SEND' and sending_time < current_timestamp limit 1;""")
         try:
-            (cpg_id,sender,xms,billing_id,webuser_id,product_id,api_credential_id) = cur.fetchone()
+            (cpg_id,sender,xms,billing_id,account_id,product_id,api_key) = cur.fetchone()
         except:
             pass
         
         if cpg_id:
             d_ac = {
                 'billing_id': billing_id,
-                'webuser_id': webuser_id,
+                'account_id': account_id,
                 'product_id': product_id,
-                'api_credential_id': api_credential_id,
+                'api_key': api_key,
                 'sender':sender,
                 'xms': xms,
                 'cpg_id': cpg_id
@@ -215,33 +325,23 @@ def main():
     
             #### get B-number list
             data = get_cpg_list(cur,cpg_id) #dict: md5 => {'number':'12355','var':'variable'}
-    
-            ### build a list of dict to be passed to multithread
-            l_d = list() #list of dict to hold bnumber and other variables for a SMS
-            for md5, d in data.items():
-                l_d.append(d)
-                count += 1
-                
-            if count > 0:
-                logger.info(f"cpg_id {cpg_id} has {count} bnumber")
-
+            if len(data) > 0:
                 start_time = time.time()
-        
-                with ThreadPoolExecutor(num_thread) as executor:
-                    executor.map(send_sms, l_d, repeat(d_ac)) #for the same campaign, d_ac hold account related info, which is the same, so "repeat"
-                    ## TBD: how to catch exception in the thread?
+                for md5, d in data.items():
+                    send_sms(d,d_ac)
          
                 end_time = time.time()
                 duration = int(end_time - start_time)
                 logger.info(f"duration: {duration}")
-
-                cur.execute(f"update cpg set status = 'SENT' where id = {cpg_id}")
             else:
                 logger.warning(f"!!! no blast list found for cpg_id {cpg_id}")
-        if count == 0:
+
+            cur.execute(f"update cpg set status = 'SENT' where id = {cpg_id}")
+
+        else:
             logger.info("Keep Alive")
         
-        time.sleep(30)
+        time.sleep(20)
 
 
 if __name__ == '__main__':
