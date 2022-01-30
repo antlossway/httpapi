@@ -241,9 +241,9 @@ def send_sms(d, d_ac): #for each entry of blast list, create a SMS
 
         data = {
             "msgid": msgid,
-            "sender": d_ac.get("sender"),
-            "to": bnumber,
-            "content": content,
+            "tpoa": d_ac.get("sender"),
+            "bnumber": bnumber,
+            "xms": content,
             "dcs": dcs,
             "cpg_id": d_ac.get("cpg_id")
         }

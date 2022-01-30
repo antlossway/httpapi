@@ -7,7 +7,7 @@ import re
 from myutils import logger,config
 from mydb import g_numbering_plan, r
 
-notif1_expire = 5*24*3600 #redis: MSGID2:msgid2 => msgid1:::api_key:::require_dlr
+notif1_expire = 4*24*3600 #redis: MSGID2:msgid2 => msgid1:::api_key:::require_dlr
 sms_expire = 3*24*3600
 
 """
