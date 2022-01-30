@@ -30,7 +30,10 @@ try:
 except:
     pass
 
-instance = os.path.basename(__file__).split(".")[0] + '-' + ext
+instance = os.path.basename(__file__).split(".")[0]
+if ext != '':
+    instance += '-' + ext
+
 log = os.path.join(basedir, f"../log/{instance}.log") #/home/amx/log/qrouter.log
 lockfile= os.path.join(basedir, f"../var/lock/{instance}.lock")
 trash_dir = os.path.join(basedir, "../trash")
@@ -121,7 +124,8 @@ def read_config():
             if conn_type == 'smpp':
                 d_smpp_ac[acid] = f"{acname}---{billing_id}---{product_id}---{in_dir}"
             else:
-                d_http_ac[acid] = f"{acname}---{billing_id}---{product_id}---{api_key}"
+                #d_http_ac[acid] = f"{acname}---{billing_id}---{product_id}---{api_key}"
+                d_http_ac[api_key] = f"{acname}---{billing_id}---{product_id}---{acid}"
     else:
         logger.warning("!!! query table account return empty result, keep existing data")
 
@@ -232,12 +236,34 @@ def scandir(acid):
     count = 0
     for myfile in e.iterdir():
         if count > batch:
-            logger.info(f"processed {count} file for {acname}({acid}) {in_dir}")
+            logger.info(f"processed {count} sms for {acname}({acid}) {in_dir}")
             break
         #if myfile.is_file() and re.match("^xms",os.path.basename(myfile)):
         if os.path.getsize(myfile) > 0 and re.match("^xms",os.path.basename(myfile)):
             if process_file(myfile,acid):
                 count += 1 
+
+def scan_redis_queue(api_key):
+    acname,billing_id,product_id,acid = d_http_ac.get(api_key).split("---")
+    ## rpop from list HTTPIN:{api_key}
+    queue_in = f"HTTPIN:{api_key}"
+    count = 0
+    while(r.llen(queue_in) > 0):
+        if count > batch:
+            logger.info(f"processed {count} sms for {acname}({acid}) {api_key}")
+            break
+        msgid = r.rpop(queue_in).decode("utf-8")
+        logger.info(f"### LPOP from {queue_in}: {msgid}")
+        ### find sms detail from HASH HTTPSMS:{msgid}
+        index = f"HTTPSMS:{msgid}"
+        res = r.hgetall(index)
+        d_sms = { k.decode('utf-8'): res.get(k).decode('utf-8') for k in res.keys() }
+        logger.info(f"### HGETALL {index}")
+        logger.info(json.dumps(d_sms,indent=4))
+
+        process_sms(d_sms,api_key,None)
+        count += 1
+
 
 def get_route(product_id,cid,opid):
     ###smsc_id---provider_id---output_dir
@@ -272,14 +298,7 @@ def generate_dlr():
     pass
 
 def process_file(myfile,acid):
-    acname,billing_id,product_id,in_dir = d_smpp_ac.get(acid).split("---")
-
-    bnumber,msgid,xms,tpoa,udh,action = '','','','','',''
-    dcs,error,split = 0,0,1
-    route = ''
-    to_trash= 0
-    tpoa_status = 2000 
-    insert_optout = 0 #if it's optout MO, insert into table optout, so future Promotion should not be sent to this number
+    d_sms = dict()
     logger.info(f"process_file: {myfile} for acid {acid}")
     logger.info("=========================")
     with open(myfile,'r') as reader:
@@ -289,24 +308,56 @@ def process_file(myfile,acid):
             #if(z := r_xms.match(line)):
                 #xms = z.groups()[0]
             if r_xms.match(line):
-                xms = r_xms.match(line).groups()[0]
+                d_sms['xms'] = r_xms.match(line).groups()[0]
             elif r_bnumber.match(line):
-                bnumber = r_bnumber.match(line).groups()[0]
+                d_sms['bnumber'] = r_bnumber.match(line).groups()[0]
             elif r_tpoa.match(line):
                 tpoa = r_tpoa.match(line).groups()[0]
                 tpoa = re.sub(r'^\d:\d:',r'',tpoa).strip() # 5:0:Routee => Routee
+                d_sms['tpoa'] = tpoa
             elif r_udh.match(line):
-                udh = r_udh.match(line).groups()[0]
+                d_sms['udh'] = r_udh.match(line).groups()[0]
             elif r_dcs.match(line):
-                dcs = r_dcs.match(line).groups()[0]
+                d_sms['dcs'] = r_dcs.match(line).groups()[0]
             elif r_msgid.match(line):
-                msgid = r_msgid.match(line).groups()[0]
+                d_sms['msgid'] = r_msgid.match(line).groups()[0]
             elif r_split.match(line):
-                split = r_split.match(line).groups()[0]
+                d_sms['split'] = r_split.match(line).groups()[0]
             elif r_action.match(line):
-                action = r_action.match(line).groups()[0]
+                d_sms['action'] = r_action.match(line).groups()[0]
 
     logger.info("=========================")
+
+    logger.info("### debug d_sms")
+    logger.info(json.dumps(d_sms,indent=4))
+
+    process_sms(d_sms,acid,myfile)
+
+    return 1
+
+
+def process_sms(d_sms,acid,myfile): #for HTTP incoming, acid is api_key
+    if myfile:
+        acname,billing_id,product_id,in_dir = d_smpp_ac.get(acid).split("---")
+    else:
+        api_key = acid
+        acname,billing_id,product_id,acid = d_http_ac.get(api_key).split("---")
+
+    bnumber,msgid,xms,tpoa,udh,action = '','','','','',''
+    dcs,error,split = 0,0,1
+    route = ''
+    to_trash= 0
+    tpoa_status = 2000 
+    insert_optout = 0 #if it's optout MO, insert into table optout, so future Promotion should not be sent to this number
+
+    tpoa = d_sms.get('tpoa')
+    bnumber = d_sms.get('bnumber')
+    xms = d_sms.get('xms')
+    udh = d_sms.get('udh',udh)
+    dcs = d_sms.get('dcs',dcs)
+    msgid = d_sms.get('msgid')
+    split = d_sms.get('split',split)
+    action = d_sms.get('action',action)
 
     bnumber = clean_bnumber(bnumber)
     #print(f"debug: numbering_plan has {len(np)} entries")
@@ -314,7 +365,8 @@ def process_file(myfile,acid):
     if result == None:
         logger.info(f"!!! {bnumber} does not belong to any network")
         ### delete file
-        os.remove(myfile)
+        if myfile: # redis HASH HTTPSMS:{msgid} will expire by itself
+            os.remove(myfile)
         generate_dlr()
         return 0
     else:
@@ -322,11 +374,10 @@ def process_file(myfile,acid):
         cid = int(cid)
         opid = int(opid)
 
-
     xms_len = len(xms)
 
     #### trash DLR , only process MO
-    if action == 'Status':
+    if action == 'Status': #only happen for smpp
         logger.info(f"!!! trash DLR")
         to_trash = 1
         outfile = os.path.join(trash_dir, os.path.basename(myfile))
@@ -334,18 +385,24 @@ def process_file(myfile,acid):
         smsc_id = get_route(product_id,cid,opid)
         smsc_name = d_smsc.get(smsc_id)
         provider_id = d_smsc_provider.get(smsc_id)
+        
         outdir = d_smsc_dir.get(smsc_id)
         tmpdir = outdir + '/tmp'
-        outfile = os.path.join(outdir, os.path.basename(myfile))
-        tmpsms = os.path.join(tmpdir, os.path.basename(myfile))
-    
-    if to_trash == 1:
+        if myfile:
+            outfile = os.path.join(outdir, os.path.basename(myfile))
+            tmpsms = os.path.join(tmpdir, os.path.basename(myfile))
+        else:
+            outfile = os.path.join(outdir, f"xms{msgid}")
+            tmpsms = os.path.join(tmpdir, f"xms{msgid}")
+        
+    if to_trash == 1: #only happen for smpp
         os.rename(myfile,outfile)
         logger.info(f"trash {myfile} to {outfile}")
 
-    else: #to_trash == 0
-        os.remove(myfile)
-        logger.info(f"delete input file {myfile}")
+    else:
+        if myfile:
+            os.remove(myfile)
+            logger.info(f"delete input file {myfile}")
     
         msg_submit = f"""\
 ; encoding=UTF-8
@@ -371,7 +428,6 @@ StatusReportRequest=1
 
         os.rename(tmpsms,outfile)
         logger.info(f"rename {tmpsms} to {outfile}")
-
        
         #treat single quote before inserting to postgresql
         tpoa = re.sub("'","''",tpoa)
@@ -431,7 +487,13 @@ def main():
 
         if ext == 'http':
             ### get sms from redis
-            pass
+            for api_key in d_http_ac.keys():
+                if show_alive == 1:
+                    acname,billing_id,product_id,acid = d_http_ac.get(api_key).split("---")
+                    logger.info(f"scan_redis_queue for {acname}({acid}) HTTPIN:{api_key}")
+                scan_redis_queue(api_key)
+
+            time.sleep(1)
         else:
             for acid in d_smpp_ac.keys():
                 if show_alive == 1:

@@ -164,13 +164,28 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
             "sender": sender,
             "to": msisdn,
             "content": xms,
-            "require_dlr": require_dlr,
-            "country_id": country_id,
-            "operator_id": operator_id,
-            "udh": udh
+            "udh": udh,
+            "dcs": dcs
+            #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
+            #"operator_id": operator_id,
         }
         
-        errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
+        if require_dlr == 0: #by default require_dlr=1,so no need to add
+            data["require_dlr"] = 0
+        
+#        account = {
+#        "api_key": api_key,
+#        "api_secret": api_secret,
+#        "account_id": account_id,
+#        "billing_id": billing_id,
+#        "company_name": company_name,
+#        "product_id": product_id,
+#        "product_name": product_name,
+#        "callback_url": callback_url
+#        }
+
+        #errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM') ## API don't care routing, let qrouter take care
+        errorcode = mysms.create_sms(account,data)
 
         if errorcode == 0:
             pass

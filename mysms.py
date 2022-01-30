@@ -1,14 +1,14 @@
 import os
 import mydb # r => redis connector, cur => postgres
-from uuid import uuid4
 import requests
 import json
 import re
 
 from myutils import logger,config
-from mydb import g_numbering_plan
+from mydb import g_numbering_plan, r
 
 notif1_expire = 5*24*3600 #redis: MSGID2:msgid2 => msgid1:::api_key:::require_dlr
+sms_expire = 3*24*3600
 
 """
 example request and response body to be displayed in API document
@@ -135,8 +135,7 @@ def create_sms_file(acname,sender,to,xms,msgid,dcs,udh,require_dlr):
         return error
 
 
-def create_sms_ameex(ac,data,provider):
-
+def create_sms_ameex(ac,data,provider): #post SMS to Ameex A2P API
     sender = data.get('sender')
     msisdn = data.get('to')
     xms = data.get('content')
@@ -184,7 +183,7 @@ def create_sms_ameex(ac,data,provider):
     
 
 ## call HTTP API on a2p server
-def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict includes sms info
+def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms info
 #        ac = {
 #        "api_key": api_key,
 #        "api_secret": api_secret,
@@ -196,64 +195,69 @@ def create_sms(ac,data,provider): #ac: dict inclues account info, data: dict inc
 #        "callback_url": callback_url
 #        }
 
+#            data = {
+#            "msgid": msgid,
+#            "sender": sender,
+#            "to": msisdn,
+#            "content": xms,
+#            "udh": udh
+#            "dcs": dcs 
+#            }
 
-    #     data = {
-    #     "msgid": msgid,
-    #     "sender": sender,
-    #     "to": msisdn,
-    #     "content": xms,
-    #     "require_dlr": require_dlr,
-    #     "country_id": country_id,
-    #     "operator_id": operator_id,
-    #     "udh": udh,
-    #     "dcs": dcs,
-    #     "cpg_id": cpg_id #send_campaign.py will call api/internal/sms
-    # }
+    logger.info(f"### debug: account {ac}")
+    logger.info(json.dumps(ac, indent=4))
+    logger.info(f"### debug: sms {ac}")
+    logger.info(json.dumps(data, indent=4))
 
-    logger.info(f"debug: account {ac}")
-    account_id = ac.get('account_id')
-    billing_id = ac.get('billing_id')
-    product_id = ac.get('product_id')
+#    account_id = ac.get('account_id')
+#    billing_id = ac.get('billing_id')
+#    product_id = ac.get('product_id')
+    api_key = ac.get('api_key')
 
     error = 0
     msgid = data.get('msgid')
     sender = data.get('sender')
     bnumber = data.get('to')
     xms = data.get('content')
-    country_id = data.get('country_id')
-    operator_id = data.get('operator_id')
     udh = data.get('udh','')
-    cpg_id = data.get('cpg_id',0)
+    #cpg_id = data.get('cpg_id',0)
     dcs = data.get('dcs',0)
-    msgid2 = ''
 
-    sender = re.sub(r"'",r"''",sender)
-    xms = re.sub(r"'",r"''",xms)
+    ### - 
+    d_sms = {
+        "msgid": msgid,
+        "tpoa": sender,
+        "bnumber": bnumber,
+        "xms": xms,
+        "dcs": dcs
+    }
 
-    if provider.startswith("AMEEX"):
-        create_error, msgid2 = create_sms_ameex(ac,data,provider)
-    else:
-        pass #other provider API connector
+    if udh:
+        d_sms['udh'] = udh
 
-    if create_error == 0 and msgid2 != None and msgid2 != '': #SMS successfully submitted to provider
-        #record into redis cdr_cache
-        if cpg_id != 0:
-            sql = f"""insert into cdr (account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,
-            dcs,len,udh,xms,cpg_id) values ({account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',
-            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}',{cpg_id});"""
-        else:
-            sql = f"""insert into cdr (account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,
-            dcs,len,udh,xms) values ({account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',
-            {country_id},{operator_id},{dcs},{len(xms)},'{udh}','{xms}');"""
+    with r.pipeline() as pipe:
+        ### lpush redis list HTTPIN:{api_key}: {msgid}
+        redis_list = f"HTTPIN:{api_key}"
+        r.lpush(redis_list, msgid)
+        logger.info(f"## redis: LPUSH {redis_list} {msgid}")
+        
+        ### sms: hset redis HASH index HTTPSMS:{msgid}: 
+        index = f"HTTPSMS:{msgid}"
+        for k,v in d_sms.items():
+            r.hset(index,k,v)
+            logger.info(f"## redis: HSET {index} {k} {v}")
+        r.expire(name=index, time=sms_expire) #expire in 3 days
+        logger.info(f"#### redis: EXPIRE {index} {sms_expire}")
+ 
+        ### notif1: hset redis HASH
+        index_notif1 = f"{bnumber}:::{msgid}"
+        r.hset(index_notif1,"CUSTOMER",api_key)
+        logger.info(f"## redis: HSET {index_notif1} CUSTOMER {api_key}")
+        r.expire(name=index_notif1, time=notif1_expire)
+        logger.info(f"#### redis: EXPIRE {index_notif1} {notif1_expire}")
 
-        logger.info(sql)
-        if mydb.r.lpush('cdr_cache',sql): #successful transaction return True
-            logger.info(f"LPUSH cdr_cache OK")
-        else:
-            logger.warning(f"!!! problem to LPUSH cdr_cache {sql}")
-    else: # problem in outgoing route
-        error = 2000
-    
+        pipe.execute()
+  
     return error
 
 
