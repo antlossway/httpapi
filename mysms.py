@@ -239,20 +239,21 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
         ### lpush redis list HTTPIN:{api_key}: {msgid}
         redis_list = f"HTTPIN:{api_key}"
         r.lpush(redis_list, msgid)
-        logger.info(f"## redis: LPUSH {redis_list} {msgid}")
+        logger.info(f"##add msgid in list redis: LPUSH {redis_list} {msgid}")
         
         ### sms: hset redis HASH index HTTPSMS:{msgid}: 
         index = f"HTTPSMS:{msgid}"
         for k,v in d_sms.items():
             r.hset(index,k,v)
-            logger.info(f"## redis: HSET {index} {k} {v}")
+            logger.info(f"## add SMS detail in redis: HSET {index} {k} {v}")
         r.expire(name=index, time=sms_expire) #expire in 3 days
         logger.info(f"#### redis: EXPIRE {index} {sms_expire}")
  
         ### notif1: hset redis HASH
         index_notif1 = f"{bnumber}:::{msgid}"
-        r.hset(index_notif1,"CUSTOMER",api_key)
-        logger.info(f"## redis: HSET {index_notif1} CUSTOMER {api_key}")
+        value = f"HTTP:::{api_key}"
+        r.hset(index_notif1,"CUSTOMER",value)
+        logger.info(f"## record notif1 in redis: HSET {index_notif1} CUSTOMER {value}")
         r.expire(name=index_notif1, time=notif1_expire)
         logger.info(f"#### redis: EXPIRE {index_notif1} {notif1_expire}")
 
