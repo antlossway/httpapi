@@ -1355,7 +1355,7 @@ async def transaction_report(
             sql = f"""select cdr.dbtime,billing_account.company_name,account.name as account_name,cdr.msgid,cdr.tpoa,cdr.bnumber,countries.name as country,operators.name as operator,
                     cdr.status,cdr.xms,cdr.udh,cdr.split,to_char(notif3_dbtime,'YYYY-MM-DD HH24:MI:SS') as notif_dbtime from cdr 
                     join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
-                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where cdr.dbtime between '{start_date}' and '{end_date}' """
+                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where date(cdr.dbtime) between '{start_date}' and '{end_date}' """
     
         if account_id:
             sql += f"and cdr.account_id = {account_id}"
