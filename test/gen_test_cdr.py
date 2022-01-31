@@ -23,10 +23,10 @@ def read_config():
 
     config.read(config_file)
 
-    for section in config.sections():
-        print(f"#### {section} ####")
-        for key,value in config[section].items():
-            print(f"{key} => {value}")
+#    for section in config.sections():
+#        print(f"#### {section} ####")
+#        for key,value in config[section].items():
+#            print(f"{key} => {value}")
 
     return config
 
@@ -93,6 +93,7 @@ content_template = ['<ID> is your verfication code', 'PIN CODE: <ID>']
 
 l_status = ['DELIVRD','EXPIRED','REJECTD','UNDELIV','Pending']
 
+selling_price = 0.01
 
 def gen_cdr():
     account_id = random.choice(l_acid)
@@ -108,9 +109,9 @@ def gen_cdr():
     ts = gen_random_timestamp()
     
     if status == 'Pending':
-        sql = f"""insert into cdr (dbtime,account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,provider_id) values ('{ts}',{account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}',{provider_id});"""
+        sql = f"""insert into cdr (dbtime,account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,provider_id,selling_price) values ('{ts}',{account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}',{provider_id},{selling_price});"""
     else:
-        sql = f"""insert into cdr (dbtime,account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,status,provider_id) values ('{ts}',{account_id},{billing_id},{product_id}, '{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}','{status}', {provider_id});"""
+        sql = f"""insert into cdr (dbtime,account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,status,provider_id,notif3_dbtime,selling_price) values ('{ts}',{account_id},{billing_id},{product_id}, '{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}','{status}', {provider_id},'{ts}',{selling_price});"""
 
     print(sql)
 
