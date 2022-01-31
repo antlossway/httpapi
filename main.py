@@ -51,7 +51,6 @@ def is_empty(field):
 async def home():
     return {'result': 'hello'}
 
-#@app.post('/sms', status_code=201)
 @app.post('/api/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
 #async def post_sms(response: Response,
 async def post_sms(request: Request,
@@ -62,6 +61,8 @@ async def post_sms(request: Request,
 #account: str = Depends(myauth.myauth_basic) 
 account=Depends(myauth.authenticate) # multiple authentication methods, account is dict including many info
 ):
+
+    logger.info(request.headers) #debug raw request
     logger.info(f"{request.url.path}: from {request.client.host}")
     d_sms = arg_sms.dict()
 
