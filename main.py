@@ -1341,18 +1341,21 @@ async def transaction_report(
     end_date = d_arg.get("end_date",None)
 
     if msgid:
-        sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
-                status,xms,udh,split from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
-                join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where msgid='{msgid}' """
+        sql = f"""select cdr.dbtime,billing_account.company_name,account.name as account_name,cdr.msgid,cdr.tpoa,cdr.bnumber,countries.name as country,operators.name as operator,
+                cdr.status,cdr.xms,cdr.udh,cdr.split,to_char(notif3_dbtime,'YYYY-MM-DD HH24:MI:SS') as notif_dbtime from cdr 
+                join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where cdr.msgid='{msgid}' """
     else:
         if not start_date or not end_date: #default return past 7 days traffic
-            sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
-                    status,xms,udh,split from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
-                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where dbtime > current_timestamp - interval '7 days' """
+            sql = f"""select cdr.dbtime,billing_account.company_name,account.name as account_name,cdr.msgid,cdr.tpoa,cdr.bnumber,countries.name as country,operators.name as operator,
+                    cdr.status,cdr.xms,cdr.udh,cdr.split,to_char(notif3_dbtime,'YYYY-MM-DD HH24:MI:SS') as notif_dbtime from cdr 
+                    join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where cdr.dbtime > current_timestamp - interval '7 days' """
         else:
-            sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
-                    status,xms,udh,split from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
-                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where dbtime between '{start_date}' and '{end_date}' """
+            sql = f"""select cdr.dbtime,billing_account.company_name,account.name as account_name,cdr.msgid,cdr.tpoa,cdr.bnumber,countries.name as country,operators.name as operator,
+                    cdr.status,cdr.xms,cdr.udh,cdr.split,to_char(notif3_dbtime,'YYYY-MM-DD HH24:MI:SS') as notif_dbtime from cdr 
+                    join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                    join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where cdr.dbtime between '{start_date}' and '{end_date}' """
     
         if account_id:
             sql += f"and cdr.account_id = {account_id}"
@@ -1371,7 +1374,7 @@ async def transaction_report(
     cur.execute(sql)
     rows = cur.fetchall()
     for row in rows:
-        (ts,company_name,account_name,msgid,tpoa,bnumber,country,operator,status,xms,udh,split) = row
+        (ts,company_name,account_name,msgid,tpoa,bnumber,country,operator,status,xms,udh,split,notif3_dbtime) = row
         ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
         d = {
             "timestamp": ts,
@@ -1386,7 +1389,8 @@ async def transaction_report(
             "xms": xms,
             "udh": udh,
             "split": 1,
-            "cost": 0.01
+            "cost": 0.01,
+            "notif3_dbtime": notif3_dbtime
         }
 
         l_data.append(d)
