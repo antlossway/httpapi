@@ -516,7 +516,7 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 async def get_all_billing_accounts():
     cur.execute(f"""
     select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
-    contact_number,billing_type,currency,live from billing_account where id = 4;""")
+    contact_number,billing_type,currency,live from billing_account where id != 4;""")
 
     l_data = list()
     rows = cur.fetchall()
