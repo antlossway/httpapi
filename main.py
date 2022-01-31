@@ -1438,6 +1438,7 @@ async def volume_chart(
     logger.info(sql)
 
     l_data = list()
+
     d1 = defaultdict(list) #company_name => [ day1---qty1, day2---qty2...]
 
     cur.execute(sql)
@@ -1448,8 +1449,8 @@ async def volume_chart(
 
         d1[company_name].append(f"{day}---{qty}")
    
-    l1 = list()
     for company_name,l_v in sorted(d1.items()):
+        l1 = list()
         for v in l_v:
             day,qty = v.split('---')
             d = {
@@ -1458,12 +1459,13 @@ async def volume_chart(
             }
 
             l1.append(d)
-        d = {
+
+        d_company = {
             "name": company_name,
             "data": l1
         }
 
-        l_data.append(d)
+        l_data.append(d_company)
     
     
     if len(l_data) > 0:
@@ -1519,8 +1521,8 @@ async def volume_chart(
 
         d1[company_name].append(f"{day}---{qty}")
    
-    l1 = list()
     for company_name,l_v in sorted(d1.items()):
+        l1 = list()
         for v in l_v:
             day,qty = v.split('---')
             d = {
