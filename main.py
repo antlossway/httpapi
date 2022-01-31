@@ -1438,7 +1438,7 @@ async def volume_chart(
     logger.info(sql)
 
     l_data = list()
-    data = defaultdict(dict)
+    d1 = defaultdict(list) #company_name => [ day1---qty1, day2---qty2...]
 
     cur.execute(sql)
     rows = cur.fetchall()
@@ -1446,17 +1446,25 @@ async def volume_chart(
         (day,company_name,qty) = row
         day = day.strftime("%Y-%m-%d")
 
-        data = {
-            "x": day,
-            "y": qty
-        }
+        d1[company_name].append(f"{day}---{qty}")
+   
+    l1 = list()
+    for company_name,l_v in sorted(d1.items()):
+        for v in l_v:
+            day,qty = v.split('---')
+            d = {
+                "x": day,
+                "y": qty
+            }
 
+            l1.append(d)
         d = {
             "name": company_name,
-            "data": data
-        }   
+            "data": l1
+        }
 
         l_data.append(d)
+    
     
     if len(l_data) > 0:
         resp_json = {
@@ -1500,26 +1508,34 @@ async def volume_chart(
     logger.info(sql)
 
     l_data = list()
-    data = defaultdict(dict)
+    d1 = defaultdict(list) #company_name => [ day1---qty1, day2---qty2...]
 
     cur.execute(sql)
     rows = cur.fetchall()
     for row in rows:
-        (day,company_name,sell) = row
+        (day,company_name,qty) = row #qty = sell
         day = day.strftime("%Y-%m-%d")
-        sell = round(float(sell) , 3)
+        qty = round(float(qty) , 3) 
 
-        data = {
-            "x": day,
-            "y": sell
-        }
+        d1[company_name].append(f"{day}---{qty}")
+   
+    l1 = list()
+    for company_name,l_v in sorted(d1.items()):
+        for v in l_v:
+            day,qty = v.split('---')
+            d = {
+                "x": day,
+                "y": qty
+            }
 
+            l1.append(d)
         d = {
             "name": company_name,
-            "data": data
-        }   
+            "data": l1
+        }
 
         l_data.append(d)
+    
     
     if len(l_data) > 0:
         resp_json = {
@@ -1536,4 +1552,5 @@ async def volume_chart(
         return JSONResponse(status_code=404, content=resp_json)
     
     return JSONResponse(status_code=200, content=resp_json)
- 
+
+
