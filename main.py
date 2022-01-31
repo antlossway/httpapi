@@ -1411,4 +1411,129 @@ async def transaction_report(
         return JSONResponse(status_code=404, content=resp_json)
     
     return JSONResponse(status_code=200, content=resp_json)
+
+@app.post("/api/internal/volume_chart") #optional arg: billing_id, account_id
+async def volume_chart(
+    args: models.TrafficReportRequest = Body(
+        ...,
+        examples = models.example_traffic_report_request,
+    ),
+):
+    d_arg = args.dict()
+    billing_id = d_arg.get("billing_id")
+    account_id = d_arg.get("account_id")
+    start_date = d_arg.get("start_date",None)
+    end_date = d_arg.get("end_date",None)
+    if not start_date or not end_date: #default return past 7 days traffic
+        sql = f"""select date,b.company_name,sum(sum_split) from cdr_agg join billing_account b on cdr_agg.billing_id = b.id where date >= current_date - interval '7 days' """
+
+    else:
+        sql = f"""select date,b.company_name,sum(sum_split) from cdr_agg join billing_account b on cdr_agg.billing_id = b.id where date between '{start_date}' and '{end_date}' """
+
+    if account_id:
+        sql += f"and account_id = {account_id}"
+    elif billing_id:
+        sql += f"and billing_id = {billing_id}"
+    sql += "group by date,b.company_name order by date"
+    logger.info(sql)
+
+    l_data = list()
+    data = defaultdict(dict)
+
+    cur.execute(sql)
+    rows = cur.fetchall()
+    for row in rows:
+        (day,company_name,qty) = row
+        day = day.strftime("%Y-%m-%d")
+
+        data = {
+            "x": day,
+            "y": qty
+        }
+
+        d = {
+            "name": company_name,
+            "data": data
+        }   
+
+        l_data.append(d)
+    
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode" : 0,
+            "status": "Success",
+            "count": len(l_data),
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"No Record found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
+@app.post("/api/internal/cost_chart") #optional arg: billing_id, account_id
+async def volume_chart(
+    args: models.TrafficReportRequest = Body(
+        ...,
+        examples = models.example_traffic_report_request,
+    ),
+):
+    d_arg = args.dict()
+    billing_id = d_arg.get("billing_id")
+    account_id = d_arg.get("account_id")
+    start_date = d_arg.get("start_date",None)
+    end_date = d_arg.get("end_date",None)
+    if not start_date or not end_date: #default return past 7 days traffic
+        sql = f"""select date,b.company_name,sum(sum_sell) from cdr_agg join billing_account b on cdr_agg.billing_id = b.id where date >= current_date - interval '7 days' """
+
+    else:
+        sql = f"""select date,b.company_name,sum(sum_sell) from cdr_agg join billing_account b on cdr_agg.billing_id = b.id where date between '{start_date}' and '{end_date}' """
+
+    if account_id:
+        sql += f"and account_id = {account_id}"
+    elif billing_id:
+        sql += f"and billing_id = {billing_id}"
+    sql += "group by date,b.company_name order by date"
+    logger.info(sql)
+
+    l_data = list()
+    data = defaultdict(dict)
+
+    cur.execute(sql)
+    rows = cur.fetchall()
+    for row in rows:
+        (day,company_name,sell) = row
+        day = day.strftime("%Y-%m-%d")
+        sell = round(float(sell) , 3)
+
+        data = {
+            "x": day,
+            "y": sell
+        }
+
+        d = {
+            "name": company_name,
+            "data": data
+        }   
+
+        l_data.append(d)
+    
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode" : 0,
+            "status": "Success",
+            "count": len(l_data),
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"No Record found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
  
