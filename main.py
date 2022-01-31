@@ -594,30 +594,34 @@ async def get_billing_account_info(billing_id: int):
 
 # use responses to add additional response like returning errors
 @app.get("/api/internal/account/{billing_id}") #get all accounts for a billing account
-def get_accounts_by_billing_id(billing_id: int, response:Response):
-    cur.execute(f"""
-    select a.id as account_id,a.name as account_name,a.connection_type,p.name as product_name,systemid,password,api_key,api_secret,
-    callback_url,a.comment from account a join product p on a.product_id=p.id where a.deleted=0 and billing_id=%s
-    """,(billing_id,))
+def get_accounts_by_billing_id(billing_id: int):
+    cur.execute(f"""select a.billing_id,b.company_name,a.id as account_id,a.name as account_name,a.product_id,p.name as product_name,a.live,
+    a.connection_type, a.systemid,a.password,a.api_key,a.api_secret,a.callback_url,a.comment from account a join billing_account b on b.id=a.billing_id 
+    join product p on a.product_id = p.id where a.deleted=0 and a.billing_id={billing_id};""")
 
     l_data = list() #list of dict
     rows = cur.fetchall()
     for row in rows:
-        (account_id,account_name,connection_type,product_name,systemid,password,api_key,api_secret,callback_url,comment) = row
+    
+        (billing_id,company_name,account_id,account_name,product_id,product_name,live,connection_type,systemid,password,api_key,api_secret,callback_url,comment) = row
         d = {
+            "billing_id": billing_id,
+            "company_name": company_name,
             "account_id": account_id,
             "account_name": account_name,
-            "connction_type": connection_type,
+            "product_id": product_id,
             "product_name": product_name,
+            "live": live,
+            "connection_type": connection_type,
             "systemid": systemid,
             "password": password,
             "api_key": api_key,
             "api_secret": api_secret,
             "callback_url": callback_url,
-            "comment": comment
+            "comment": comment,
         }
         l_data.append(d)
-    
+
     resp_json = dict()
 
     if len(l_data) > 0:
@@ -629,29 +633,37 @@ def get_accounts_by_billing_id(billing_id: int, response:Response):
     else:
         resp_json = {
             "errorcode": 1,
-            "status":f"Account Not found for billingid {billing_id}"
+            "status":f"Account Not found for billing_id {billing_id}"
         }
         return JSONResponse(status_code=404, content=resp_json)
     
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.get("/api/internal/account/")#get all accounts (related to billing accounts)
+@app.get("/api/internal/account")#get all accounts (related to billing accounts)
 def get_all_accounts():
-    cur.execute(f"""select billing_id,b.company_name,a.id as account_id,a.name as account_name, 
-    a.connection_type,p.name as product_name from account a join billing_account b on b.id=a.billing_id 
+    cur.execute(f"""select a.billing_id,b.company_name,a.id as account_id,a.name as account_name,a.product_id,p.name as product_name,a.live,
+    a.connection_type, a.systemid,a.password,a.api_key,a.api_secret,a.callback_url,a.comment from account a join billing_account b on b.id=a.billing_id 
     join product p on a.product_id = p.id where a.deleted=0;""")
 
     l_data = list() #list of dict
     rows = cur.fetchall()
     for row in rows:
-        (billing_id,company_name,account_id,account_name,connection_type,product_name) = row
+        (billing_id,company_name,account_id,account_name,product_id,product_name,live,connection_type,systemid,password,api_key,api_secret,callback_url,comment) = row
         d = {
             "billing_id": billing_id,
             "company_name": company_name,
             "account_id": account_id,
             "account_name": account_name,
+            "product_id": product_id,
+            "product_name": product_name,
+            "live": live,
             "connection_type": connection_type,
-            "product_name": product_name
+            "systemid": systemid,
+            "password": password,
+            "api_key": api_key,
+            "api_secret": api_secret,
+            "callback_url": callback_url,
+            "comment": comment,
         }
         l_data.append(d)
     
@@ -1164,22 +1176,58 @@ async def get_password_hash(args: models.PasswordHashRequest):
     }
     return JSONResponse(content=resp_json)
 
-
-@app.get("/api/internal/audit/{billing_id}", response_model=models.GetAuditResponse,
-        responses={404: {"model": models.MsgNotFound}})
-async def get_auditlog_by_billing_id(billing_id:int):
-    cur.execute(f"""select a.creation_time,u.username,a.auditlog from audit a 
-                join webuser u on a.webuser_id = u.id where u.billing_id={billing_id} order by a.creation_time desc limit 100;""")
+@app.get("/api/internal/audit")
+async def get_auditlog():
+    cur.execute(f"""select a.creation_time,u.username,a.auditlog,b.company_name from audit a 
+                join webuser u on a.webuser_id = u.id join billing_account b on u.billing_id = b.id order by a.creation_time desc limit 100;""")
 
     rows = cur.fetchall()
     l_data = list()
     for row in rows:
-        (ts, username,auditlog) = row
+        (ts, username,auditlog,company_name) = row
         ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
         d = {
             "timestamp": ts,
             "username": username,
-            "audit": auditlog
+            "audit": auditlog,
+            "company_name": company_name
+        }
+        l_data.append(d)
+    
+    resp_json = dict()
+
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode":0,
+            "status": "Success",
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"Auditlog Not found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
+
+@app.get("/api/internal/audit/{billing_id}", response_model=models.GetAuditResponse,
+        responses={404: {"model": models.MsgNotFound}})
+async def get_auditlog_by_billing_id(billing_id:int):
+    cur.execute(f"""select a.creation_time,u.username,a.auditlog,b.company_name from audit a 
+                join webuser u on a.webuser_id = u.id join billing_account b on u.billing_id = b.id where u.billing_id={billing_id} order by a.creation_time desc limit 100;""")
+
+    rows = cur.fetchall()
+    l_data = list()
+    for row in rows:
+        (ts, username,auditlog,company_name) = row
+        ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
+        d = {
+            "timestamp": ts,
+            "username": username,
+            "audit": auditlog,
+            "company_name": company_name
         }
         l_data.append(d)
     
@@ -1258,6 +1306,7 @@ async def traffic_report(
         d['account_name'] = account_name
         d['product_name'] = product_name
         d['total_sent'] = total
+        d['cost'] = total * 0.01 #TBD: get_selling_pricing
         l_data.append(d)
     
     if len(l_data) > 0:
@@ -1293,16 +1342,16 @@ async def transaction_report(
 
     if msgid:
         sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
-                status,xms,udh from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                status,xms,udh,split from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
                 join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where msgid='{msgid}' """
     else:
         if not start_date or not end_date: #default return past 7 days traffic
             sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
-                    status,xms,udh from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                    status,xms,udh,split from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
                     join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where dbtime > current_timestamp - interval '7 days' """
         else:
             sql = f"""select dbtime,billing_account.company_name,account.name as account_name,msgid,tpoa,bnumber,countries.name as country,operators.name as operator,
-                    status,xms,udh from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
+                    status,xms,udh,split from cdr join billing_account on cdr.billing_id=billing_account.id join account on cdr.account_id=account.id 
                     join countries on cdr.country_id=countries.id join operators on cdr.operator_id=operators.id where dbtime between '{start_date}' and '{end_date}' """
     
         if account_id:
@@ -1322,7 +1371,7 @@ async def transaction_report(
     cur.execute(sql)
     rows = cur.fetchall()
     for row in rows:
-        (ts,company_name,account_name,msgid,tpoa,bnumber,country,operator,status,xms,udh) = row
+        (ts,company_name,account_name,msgid,tpoa,bnumber,country,operator,status,xms,udh,split) = row
         ts = ts.strftime("%Y-%m-%d, %H:%M:%S") #convert datetime.datetime obj to string
         d = {
             "timestamp": ts,
@@ -1335,7 +1384,9 @@ async def transaction_report(
             "operator": operator,
             "status": status,
             "xms": xms,
-            "udh": udh
+            "udh": udh,
+            "split": 1,
+            "cost": 0.01
         }
 
         l_data.append(d)

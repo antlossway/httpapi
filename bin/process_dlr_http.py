@@ -1,6 +1,18 @@
 #!/usr/bin/python3
 """
-read from redis list 'cdr_cache', and insert into postgres DB amx table cdr
+scan ~/sendxms/SERVER_HTTP/spool/
+
+DLR filename is in format {api_key}---{provider}---{bnumber}---{notif3_msgid}---{msgid}
+content:
+ msisdn=6586294138
+ msgid=61F6AD7E-B4D79-72D-7F9CD0A63700
+ timestamp=2022-01-30 17:04:34
+ to=NOC
+ status=DELIVRD
+ callback=http://example.com/callback
+
+post DLR to callback url, different url may need to post different format
+
 """
 import psycopg2
 import redis
@@ -9,6 +21,8 @@ import signal
 import sys
 import logging
 import time
+import re
+from pathlib import Path
 from configparser import ConfigParser
 
 #####################
@@ -16,16 +30,21 @@ from configparser import ConfigParser
 #####################
 
 basedir = os.path.abspath(os.path.dirname(__file__)) + "/../"
-redis_cdr_list = "cdr_cache"
-redis_error_list = "cdr_error"
 
 log_dir = basedir + "log/"
 lock_dir = basedir + "var/lock/"
 
-log = log_dir + "insert_cdr_from_redis_cache.log"
-lockfile= lock_dir + 'insert_cdr_from_redis_cache.lock'
+instance = os.path.basename(__file__)
+instance = re.sub(r'\.py','',instance)
 
-config_file = basedir + '.config'
+log = os.path.join(log_dir, f"{instance}.log")
+lockfile= os.path.join(lock_dir, f"{instance}.lock")
+
+spool = os.path.join(basedir, "sendxms/SERVER_HTTP/spool")
+config_file = os.path.join(basedir, '.config')
+
+print(f"log: {log}, lockfile: {lockfile}, config: {config_file}")
+exit()
 
 #####################
 ## Configuraiton  ###
@@ -71,9 +90,6 @@ db_name = config['postgresql']['db']
 db_user = config['postgresql']['user']
 db_pass = config['postgresql']['password']
 
-redis_host = config['redis']['host']
-redis_port = config['redis']['port']
-
 def check_pid_running(pid):
     try:
         os.kill(pid,0)
@@ -88,9 +104,15 @@ def leave(signal, frame): #INT, TERM
 
     sys.exit()
  
+def scandir():
+    e = Path(spool)
+
+    for myfile in e.iterdir():
+        logger.info(f"process {myfile}")
+
 def main():
     pid = os.getpid()
-    logger.info(f"Hey, {__file__} (pid {pid} is started!")
+    logger.info(f"Hey, {__file__} pid {pid} is started!")
     
     try:
         with open(lockfile, 'r') as f:
@@ -117,15 +139,6 @@ def main():
         logger.info("postgreSQL DB connected")
     except Exception as error:
         logger.warning(f"!!! DB connection failed: {error}")
-        exit()
-    
-    r = redis.Redis(host=redis_host,port=redis_port)
-    
-    try:
-        r.ping()
-        logger.info("redis server connected")
-    except:
-        logger.warning("!!! Can not connect redis server, leave")
         exit()
     
     while True:
