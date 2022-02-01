@@ -30,16 +30,12 @@ my $start_time = time();
 ####################
 ## get hash 
 ####################
-my $r_product = get_product($db);
-my %h_product = %$r_product;
-foreach my $key (keys %h_product)
-{
-	print "$key => $h_product{$key}\n";
-}
-
-#my $r_country = get_country($db);
-#my $r_operator = get_operator($db);
-#my $r_selling_price = get_all_selling_price($db);
+#my $r_product = get_product($db);
+#my %h_product = %$r_product;
+#foreach my $key (keys %h_product)
+#{
+#	print "$key => $h_product{$key}\n";
+#}
 
 my $sql;
 my $sql_result;
