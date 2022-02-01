@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import random
 import string
-from datetime import datetime
+import datetime
 from uuid import uuid4
 import re
 import time
@@ -39,6 +39,8 @@ db_pass = config['postgresql']['password']
 try:
     db = psycopg2.connect(host=db_host,database=db_name, user=db_user, password=db_pass)
     cur = db.cursor()
+    db.autocommit = True
+
 except Exception as error:
     print (f"!!! DB connection failed: {error}")
     exit()
@@ -63,6 +65,16 @@ def gen_random_timestamp():
     time_obj = time.gmtime(random_epoch) #struct_time
     time_str = time.strftime("%Y-%m-%d, %H:%M:%S", time_obj)
     return time_str
+
+def gen_random_timestamp_today():
+    today = datetime.date.today()
+    today_datetime = datetime.datetime(today.year,today.month, today.day);
+    today_epoch = today_datetime.timestamp()
+    random_epoch = today_epoch + random.randint(0, 86000) # random time in today
+    time_obj = time.gmtime(random_epoch) #struct_time
+    time_str = time.strftime("%Y-%m-%d, %H:%M:%S", time_obj)
+    return time_str
+
 
 ### get account_id, billing_id, product_id
 l_acid = list()
@@ -95,7 +107,7 @@ l_status = ['DELIVRD','EXPIRED','REJECTD','UNDELIV','Pending']
 
 selling_price = 0.01
 
-def gen_cdr():
+def gen_cdr(mode):
     account_id = random.choice(l_acid)
     billing_id,product_id = d_ac.get(account_id).split("---")
     provider_id = random.choice(l_provider_id)
@@ -106,16 +118,32 @@ def gen_cdr():
     operator_id = random.choices(l_operator_id, weights=[20,30,60])[0]
     xms = gen_content()
     status = random.choices(l_status,weights=[90,1,2,5,2])[0]
-    ts = gen_random_timestamp()
+    if mode: #today
+        ts = gen_random_timestamp_today()
+    else:
+        ts = gen_random_timestamp()
     
+    print(f"debug timestamp: {ts}")
     if status == 'Pending':
         sql = f"""insert into cdr (dbtime,account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,provider_id,selling_price) values ('{ts}',{account_id},{billing_id},{product_id},'{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}',{provider_id},{selling_price});"""
     else:
         sql = f"""insert into cdr (dbtime,account_id,billing_id,product_id,msgid,tpoa,bnumber,country_id,operator_id,xms,status,provider_id,notif3_dbtime,selling_price) values ('{ts}',{account_id},{billing_id},{product_id}, '{msgid}','{sender}','{bnumber}',{country_id},{operator_id}, '{xms}','{status}', {provider_id},'{ts}',{selling_price});"""
 
     print(sql)
+    cur.execute(sql)
 
 if __name__ == '__main__':
     num = int(sys.argv[1])
+    try:
+        mode = sys.argv[2] # today
+    except:
+        mode = None
+
+    if mode:
+        print(f"generate cdr for today")
+    else:
+        print(f"generate cdr for past 10 days ")
+
     for i in range(num):
-        gen_cdr()
+        gen_cdr(mode)
+    print(f"inserted {num} record in cdr")
