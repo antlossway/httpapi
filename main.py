@@ -1263,20 +1263,19 @@ async def traffic_report(
     start_date = d_arg.get("start_date",None)
     end_date = d_arg.get("end_date",None)
     if not start_date or not end_date: #default return past 7 days traffic
-        sql = f"""select date(dbtime) as date, b.company_name,a.name as account_name,p.name as product_name,
-        status,sum(split) from cdr join billing_account b on cdr.billing_id=b.id join account a on cdr.account_id=a.id 
-        join product p on cdr.product_id=p.id where date(dbtime) >= current_date - interval '7 days' """
-
+        sql = f"""select date, b.company_name,a.name as account_name,p.name as product_name,
+        status,sum(sum_split) from cdr_agg join billing_account b on cdr_agg.billing_id=b.id join account a on cdr_agg.account_id=a.id 
+        join product p on cdr_agg.product_id=p.id where date >= current_date - interval '7 days' """
 
     else:
-        sql = f"""select date(dbtime) as date, b.company_name,a.name as account_name,p.name as product_name,
-        status,sum(split) from cdr join billing_account b on cdr.billing_id=b.id join account a on cdr.account_id=a.id 
-        join product p on cdr.product_id=p.id where date(dbtime) between '{start_date}' and '{end_date}' """
+        sql = f"""select date, b.company_name,a.name as account_name,p.name as product_name,
+        status,sum(sum_split) from cdr_agg join billing_account b on cdr_agg.billing_id=b.id join account a on cdr_agg.account_id=a.id 
+        join product p on cdr_agg.product_id=p.id where date between '{start_date}' and '{end_date}' """
 
     if account_id:
-        sql += f"and cdr.account_id = {account_id}"
+        sql += f"and cdr_agg.account_id = {account_id}"
     elif billing_id:
-        sql += f"and cdr.billing_id = {billing_id}"
+        sql += f"and cdr_agg.billing_id = {billing_id}"
     sql += "group by date,company_name,account_name,product_name,status order by date"
     logger.info(sql)
 
