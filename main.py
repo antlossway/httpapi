@@ -1003,15 +1003,16 @@ async def insert_record(
                 }
 
                 ## update all qrouter
-                logger.info("#### processctl update allqrouter ###")
-                try:
-                    result = os.system("procesctl update allqrouter")
-                    if result == 0:
-                        logger.info("update allqrouter successful")
-                    else:
-                        logger.warning("update allqrouter failed")
-                except:
-                    pass
+                if table == "account":
+                    logger.info("#### /home/amx/script/processctl update allqrouter ###")
+                    try:
+                        result = os.system("procesctl update allqrouter")
+                        if result == 0:
+                            logger.info("update allqrouter successful")
+                        else:
+                            logger.warning("update allqrouter failed")
+                    except:
+                        pass
         except Exception as err:
             resp_json = {
                 "errorcode":2,
