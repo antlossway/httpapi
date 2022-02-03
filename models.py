@@ -460,7 +460,7 @@ example_internal_cpg={
     "valid_list_with_bnumber_only": {
         "summary": "in most cases uploaded list only contain bnumber",
         "value": {
-            "blast_list": ["+6511223344\n","+6577889900"],
+            "blast_list": ["+6511223344","+6577889900"],
             "cpg_name": "promotion for black friday",
             "cpg_tpoa": "TopShop",
             "cpg_xms": "Enjoy 50% discount",
@@ -472,7 +472,7 @@ example_internal_cpg={
     "valid_list_with_bnumber_and_variables": {
         "summary": "valid list with bnumber and variables",
         "value": {
-            "blast_list": ["name,number\n","Bob,+6511223344\n","Alice,+6577889900\n"],
+            "blast_list": ["name,number","Bob,+6511223344","Alice,+6577889900"],
             "cpg_name": "promotion for black friday",
             "cpg_tpoa": "TopShop",
             "cpg_xms": "%name%, don't miss the sale, check promotion code send to %number%",
