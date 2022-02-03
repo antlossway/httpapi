@@ -186,13 +186,6 @@ def create_sms_ameex(ac,data,provider): #post SMS to Ameex A2P API
 def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms info
 #        ac = {
 #        "api_key": api_key,
-#        "api_secret": api_secret,
-#        "account_id": account_id,
-#        "billing_id": billing_id,
-#        "company_name": company_name,
-#        "product_id": product_id,
-#        "product_name": product_name,
-#        "callback_url": callback_url
 #        }
 
 #            data = {
@@ -209,9 +202,6 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
     logger.info(f"### debug: sms {ac}")
     logger.info(json.dumps(data, indent=4))
 
-#    account_id = ac.get('account_id')
-#    billing_id = ac.get('billing_id')
-#    product_id = ac.get('product_id')
     api_key = ac.get('api_key')
 
     error = 0
