@@ -129,10 +129,10 @@ def myauth_basic_authfile(request:Request, credentials: HTTPBasicCredentials = D
 
     l_ips = d_ips.get(api_key,None)
     if l_ips and len(l_ips) > 0:
-        ### check if IP is whitelisted
-        if not orig_ip in l_ips and not orig_ip in whitelist_ip:
-            logger.warning(f"{orig_ip} is not whitelisted for {api_key}")
-            return False
+        ### check if IP is whitelisted, to be enabled later
+#        if not orig_ip in l_ips and not orig_ip in whitelist_ip:
+#            logger.warning(f"{orig_ip} is not whitelisted for {api_key}")
+#            return False
 
         ### IP is whitelisted, now check if api_secret match
         expected_secret = d_secret.get(api_key,None)

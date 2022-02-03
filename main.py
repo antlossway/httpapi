@@ -322,141 +322,141 @@ async def create_campaign(
 
 
 whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
-@app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
-#async def post_sms(response: Response,
-async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Depends(myauth.allowinternal)):
-    logger.info(f"{request.url.path}: from {request.client.host}")
-    ### only allow whitelisted IP => move to myauth.allowinternal
-    # client_ip = request.client.host
-    # if not request.client.host in whitelist_ip:
-    #     raise HTTPException(status_code=401, detail=f"unauthorized access")
-        
-    d_sms = arg_sms.dict()
-    logger.info(f"debug post body")
-    logger.info(json.dumps(d_sms,indent=4))
-    
-    sender = arg_sms.sender #client may sent "from", which is alias as "sender"
-    msisdn = arg_sms.to
-    content = arg_sms.content
-    cpg_id = arg_sms.cpg_id
-
-    result = {}
-
-    ### missing parameters
-    if is_empty(sender) or is_empty(msisdn) or is_empty(content):
-        resp_json = {
-            "errorcode": 2,
-            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-
-    ### msisdn format wrong
-    msisdn = mysms.clean_msisdn(msisdn)
-    if not msisdn:
-        resp_json = {
-            "errorcode": 2,
-            "errormsg": f"B-number {msisdn} is invalid"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-    
-    ### sender format wrong
-    len_sender = len(sender)
-    if len_sender > max_len_tpoa:
-        resp_json= {
-            "errorcode": 4,
-            "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-
-    ### check B-number country/operator ###
-    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
-    if parse_result:
-        country_id,operator_id = parse_result.split('---')
-    else:
-        resp_json = {
-            "errorcode": 5,
-            "errormsg": f"Receipient number {msisdn} does not belong to any network"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-
-    ### optional param
-    require_dlr = 0 # internal call don't need to return DLR
-    orig_udh = arg_sms.udh #default None
-
-    ### get split info
-    sms = smsutil.split(content)
-    split = len(sms.parts)
-    encoding = sms.encoding
-
-    logger.info(f"counts of SMS: {split}")
-    dcs = 0
-    if not encoding.startswith('gsm'): #gsm0338 or utf_16_be
-        dcs = 8 
-    
-    udh_base = ''
-    udh = ''
-
-    if split > 1:
-        udh_base = gen_udh_base()
-        logger.debug(f"gen_udh_base: {udh_base}")
-
-    l_resp_msg = list() #list of dict
-
-    for i,part in enumerate(sms.parts):
-        xms = part.content
-        msgid = str(uuid4())
-
-        resp_msg = {"msgid": msgid, "to": msisdn}
-        l_resp_msg.append(resp_msg)
-
-        if orig_udh != None and orig_udh != '':
-            udh = orig_udh
-            logger.info(f"keep orig UDH {udh}")
-        
-        #for long sms, our UDH will override orig UDH from client
-        if udh_base != '':
-            udh = gen_udh(udh_base,split,i+1)
-            logger.debug(f"gen_udh: {udh}")
-
-        #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
-        
-        data = {
-            "msgid": msgid,
-            "sender": sender,
-            "to": msisdn,
-            "content": xms,
-            "require_dlr": require_dlr,
-            "country_id": country_id,
-            "operator_id": operator_id,
-            "udh": udh,
-            "dcs": dcs,
-            "cpg_id": cpg_id
-        }
-        
-        account = arg_sms.account.dict()
-
-        errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
-
-        if errorcode == 0:
-            pass
-        else: #no need to process remain parts
-            resp_json = {
-                "errorcode": 6,
-                "errormsg": "Internal Server Error, please contact support"
-            }
-            return JSONResponse(status_code=422, content=resp_json)
-
-            break
-
-    resp_json = {
-                 'errorcode': errorcode,
-                 'message-count': split,
-                 'messages': l_resp_msg
-                }
-    logger.info("### reply client:")
-    logger.info(json.dumps(resp_json, indent=4))
- 
-    return JSONResponse(status_code=200, content=resp_json)
+#@app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
+##async def post_sms(response: Response,
+#async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Depends(myauth.allowinternal)):
+#    logger.info(f"{request.url.path}: from {request.client.host}")
+#    ### only allow whitelisted IP => move to myauth.allowinternal
+#    # client_ip = request.client.host
+#    # if not request.client.host in whitelist_ip:
+#    #     raise HTTPException(status_code=401, detail=f"unauthorized access")
+#        
+#    d_sms = arg_sms.dict()
+#    logger.info(f"debug post body")
+#    logger.info(json.dumps(d_sms,indent=4))
+#    
+#    sender = arg_sms.sender #client may sent "from", which is alias as "sender"
+#    msisdn = arg_sms.to
+#    content = arg_sms.content
+#    cpg_id = arg_sms.cpg_id
+#
+#    result = {}
+#
+#    ### missing parameters
+#    if is_empty(sender) or is_empty(msisdn) or is_empty(content):
+#        resp_json = {
+#            "errorcode": 2,
+#            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
+#        }
+#        return JSONResponse(status_code=422, content=resp_json)
+#
+#    ### msisdn format wrong
+#    msisdn = mysms.clean_msisdn(msisdn)
+#    if not msisdn:
+#        resp_json = {
+#            "errorcode": 2,
+#            "errormsg": f"B-number {msisdn} is invalid"
+#        }
+#        return JSONResponse(status_code=422, content=resp_json)
+#    
+#    ### sender format wrong
+#    len_sender = len(sender)
+#    if len_sender > max_len_tpoa:
+#        resp_json= {
+#            "errorcode": 4,
+#            "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
+#        }
+#        return JSONResponse(status_code=422, content=resp_json)
+#
+#    ### check B-number country/operator ###
+#    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
+#    if parse_result:
+#        country_id,operator_id = parse_result.split('---')
+#    else:
+#        resp_json = {
+#            "errorcode": 5,
+#            "errormsg": f"Receipient number {msisdn} does not belong to any network"
+#        }
+#        return JSONResponse(status_code=422, content=resp_json)
+#
+#    ### optional param
+#    require_dlr = 0 # internal call don't need to return DLR
+#    orig_udh = arg_sms.udh #default None
+#
+#    ### get split info
+#    sms = smsutil.split(content)
+#    split = len(sms.parts)
+#    encoding = sms.encoding
+#
+#    logger.info(f"counts of SMS: {split}")
+#    dcs = 0
+#    if not encoding.startswith('gsm'): #gsm0338 or utf_16_be
+#        dcs = 8 
+#    
+#    udh_base = ''
+#    udh = ''
+#
+#    if split > 1:
+#        udh_base = gen_udh_base()
+#        logger.debug(f"gen_udh_base: {udh_base}")
+#
+#    l_resp_msg = list() #list of dict
+#
+#    for i,part in enumerate(sms.parts):
+#        xms = part.content
+#        msgid = str(uuid4())
+#
+#        resp_msg = {"msgid": msgid, "to": msisdn}
+#        l_resp_msg.append(resp_msg)
+#
+#        if orig_udh != None and orig_udh != '':
+#            udh = orig_udh
+#            logger.info(f"keep orig UDH {udh}")
+#        
+#        #for long sms, our UDH will override orig UDH from client
+#        if udh_base != '':
+#            udh = gen_udh(udh_base,split,i+1)
+#            logger.debug(f"gen_udh: {udh}")
+#
+#        #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
+#        
+#        data = {
+#            "msgid": msgid,
+#            "sender": sender,
+#            "to": msisdn,
+#            "content": xms,
+#            "require_dlr": require_dlr,
+#            "country_id": country_id,
+#            "operator_id": operator_id,
+#            "udh": udh,
+#            "dcs": dcs,
+#            "cpg_id": cpg_id
+#        }
+#        
+#        account = arg_sms.account.dict()
+#
+#        errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
+#
+#        if errorcode == 0:
+#            pass
+#        else: #no need to process remain parts
+#            resp_json = {
+#                "errorcode": 6,
+#                "errormsg": "Internal Server Error, please contact support"
+#            }
+#            return JSONResponse(status_code=422, content=resp_json)
+#
+#            break
+#
+#    resp_json = {
+#                 'errorcode': errorcode,
+#                 'message-count': split,
+#                 'messages': l_resp_msg
+#                }
+#    logger.info("### reply client:")
+#    logger.info(json.dumps(resp_json, indent=4))
+# 
+#    return JSONResponse(status_code=200, content=resp_json)
 
 
 from werkzeug.security import generate_password_hash,check_password_hash
