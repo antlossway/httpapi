@@ -1642,4 +1642,57 @@ async def campaign_report(
         return JSONResponse(status_code=404, content=resp_json)
     
     return JSONResponse(status_code=200, content=resp_json)
+
+@app.get("/api/internal/cpg_report") #return all campaign
+async def get_all_campaign_report():
+    sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list n               join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
+                where n.field_name='number' """
+
+    sql += "group by n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,account_name,product_name,cpg.xms;"
+    logger.info(sql)
+
+    l_data = list()
+    data = defaultdict(dict)
+
+    cur.execute(sql)
+    rows = cur.fetchall()
+    for row in rows:
+        (cpg_id,cpg_name,status,creation_time,sending_time,tpoa,company_name,account_name,product_name,content,qty_bnumber) = row
+        creation_time = creation_time.strftime("%Y-%m-%d, %H:%M:%S")
+        try:
+            sending_time = sending_time.strftime("%Y-%m-%d, %H:%M:%S")
+        except:
+            sending_time = ""
+
+        d = {
+            "cpg_id": cpg_id,
+            "cpg_name": cpg_name,
+            "status": status,
+            "creation_time": creation_time,
+            "sending_time": sending_time,
+            "tpoa": tpoa,
+            "content": content,
+            "company_name": company_name,
+            "account_name": account_name,
+            "product_name": product_name,
+            "qty_bnumber": qty_bnumber,
+        }
+    
+        l_data.append(d)
+    
+    if len(l_data) > 0:
+        resp_json = {
+            "errorcode" : 0,
+            "status": "Success",
+            "count": len(l_data),
+            "results": l_data
+        }
+    else:
+        resp_json = {
+            "errorcode": 1,
+            "status":"No Record found!"
+        }
+        return JSONResponse(status_code=404, content=resp_json)
+    
+    return JSONResponse(status_code=200, content=resp_json)
  
