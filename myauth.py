@@ -123,15 +123,19 @@ def myauth_basic_authfile(request:Request, credentials: HTTPBasicCredentials = D
     d_secret,d_ips = read_auth()
     logger.debug(f"debug: client IP: {orig_ip}, d_secret: {json.dumps(d_secret, indent=4)}, d_ips: {json.dumps(d_ips, indent=4)}")
 
-    ### check if IP is whitelisted
-    if not orig_ip in d_ips.get(api_key) and not orig_ip in whitelist_ip:
-        logger.warning(f"{orig_ip} is not whitelisted for {api_key}")
+    if not api_key in d_secret:
+        logger.warning("debug: no account found for api_key {api_key}")
         return False
 
-    ac = dict()
-    if api_key in d_secret:
+    l_ips = d_ips.get(api_key,None)
+    if l_ips and len(l_ips) > 0:
+        ### check if IP is whitelisted
+        if not orig_ip in l_ips and not orig_ip in whitelist_ip:
+            logger.warning(f"{orig_ip} is not whitelisted for {api_key}")
+            return False
+
+        ### IP is whitelisted, now check if api_secret match
         expected_secret = d_secret.get(api_key,None)
-    
         if expected_secret:
             logger.debug(f"debug: account found with api_key {api_key}, expected_secret: {expected_secret}, received_secret: {credentials.password}")
             password_match = secrets.compare_digest(credentials.password, expected_secret)
@@ -139,8 +143,12 @@ def myauth_basic_authfile(request:Request, credentials: HTTPBasicCredentials = D
             if password_match:
                 ac = {"api_key": api_key}
                 return ac
-            
-    logger.warning("debug: no account found for api_key {api_key}")
+            else:
+                logger.warning("!!! api_secret does not match")
+        else:
+            logger.warning("!!! no api_secret found")
+
+    logger.warning("!!! no IP configured in table whitelist_ip for api_key {api_key}") 
 
     return False
 
