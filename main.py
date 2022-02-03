@@ -1006,7 +1006,7 @@ async def insert_record(
                 if table == "account":
                     logger.info("#### processctl update allqrouter ###")
                     try:
-                        result = os.system("processctl update allqrouter")
+                        result = os.system("/home/amx/script/processctl.pl update allqrouter")
                         if result == 0:
                             logger.info("update allqrouter successful")
                         else:
