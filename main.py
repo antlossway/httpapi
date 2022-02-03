@@ -1606,7 +1606,10 @@ async def campaign_report(
     for row in rows:
         (cpg_id,cpg_name,status,creation_time,sending_time,tpoa,company_name,account_name,product_name,content,qty_bnumber) = row
         creation_time = creation_time.strftime("%Y-%m-%d, %H:%M:%S")
-        sending_time = sending_time.strftime("%Y-%m-%d, %H:%M:%S")
+        try:
+            sending_time = sending_time.strftime("%Y-%m-%d, %H:%M:%S")
+        except:
+            sending_time = ""
 
         d = {
             "cpg_id": cpg_id,
