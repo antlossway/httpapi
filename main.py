@@ -918,6 +918,7 @@ async def insert_record(
                     "status": f"missing compulsory field"
                 }
                 return JSONResponse(status_code=500,content=resp_json)
+
         name = data_obj.name.strip() #smpp_account.name should be unique
         ## remove any special char, replace space with _
         name = re.sub(r'\s',r'_', name) #abc xyz => abc_xyz
@@ -1000,6 +1001,17 @@ async def insert_record(
                     "id": new_id,
                     "result": data
                 }
+
+                ## update all qrouter
+                logger.info("#### processctl update allqrouter ###")
+                try:
+                    result = os.system("procesctl update allqrouter")
+                    if result == 0:
+                        logger.info("update allqrouter successful")
+                    else:
+                        logger.warning("update allqrouter failed")
+                except:
+                    pass
         except Exception as err:
             resp_json = {
                 "errorcode":2,
