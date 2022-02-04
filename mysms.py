@@ -110,12 +110,10 @@ example_create_sms_response = {
     },
 }
 
-### legacy code logic on a2p server
-def create_sms_file(acname,sender,to,xms,msgid,dcs,udh,require_dlr):
-    uc_acname = acname.upper()
-    outdir = "/tmp/sms/" + uc_acname
+### for internal/sms to create test for newly created SMPP account
+def create_sms_file(outdir,sender,to,xms,msgid,dcs,udh,require_dlr):
     output = os.path.join(outdir, f"xms{msgid}")
-    tmpoutput = os.path.join(f"{outdir}/tmp", f"xms{msgid}")
+    tmpoutput = "tmp-" + output
     error = 0
     notif1_dir = "/tmp/notif1"
     

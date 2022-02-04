@@ -371,152 +371,151 @@ async def create_campaign(
 
 
 whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
-#@app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
-##async def post_sms(response: Response,
-#async def post_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Depends(myauth.allowinternal)):
-#    logger.info(f"{request.url.path}: from {request.client.host}")
-#    ### only allow whitelisted IP => move to myauth.allowinternal
-#    # client_ip = request.client.host
-#    # if not request.client.host in whitelist_ip:
-#    #     raise HTTPException(status_code=401, detail=f"unauthorized access")
-#        
-#    d_sms = arg_sms.dict()
-#    logger.info(f"debug post body")
-#    logger.info(json.dumps(d_sms,indent=4))
-#    
-#    sender = arg_sms.sender #client may sent "from", which is alias as "sender"
-#    msisdn = arg_sms.to
-#    content = arg_sms.content
-#    cpg_id = arg_sms.cpg_id
-#
-#    result = {}
-#
-#    ### missing parameters
-#    if is_empty(sender) or is_empty(msisdn) or is_empty(content):
-#        resp_json = {
-#            "errorcode": 2,
-#            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
-#        }
-#        return JSONResponse(status_code=422, content=resp_json)
-#
-#    ### msisdn format wrong
-#    msisdn = mysms.clean_msisdn(msisdn)
-#    if not msisdn:
-#        resp_json = {
-#            "errorcode": 2,
-#            "errormsg": f"B-number {msisdn} is invalid"
-#        }
-#        return JSONResponse(status_code=422, content=resp_json)
-#    
-#    ### sender format wrong
-#    len_sender = len(sender)
-#    if len_sender > max_len_tpoa:
-#        resp_json= {
-#            "errorcode": 4,
-#            "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
-#        }
-#        return JSONResponse(status_code=422, content=resp_json)
-#
-#    ### check B-number country/operator ###
-#    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
-#    if parse_result:
-#        country_id,operator_id = parse_result.split('---')
-#    else:
-#        resp_json = {
-#            "errorcode": 5,
-#            "errormsg": f"Receipient number {msisdn} does not belong to any network"
-#        }
-#        return JSONResponse(status_code=422, content=resp_json)
-#
-#    ### optional param
-#    require_dlr = 0 # internal call don't need to return DLR
-#    orig_udh = arg_sms.udh #default None
-#
-#    ### get split info
-#    sms = smsutil.split(content)
-#    split = len(sms.parts)
-#    encoding = sms.encoding
-#
-#    logger.info(f"counts of SMS: {split}")
-#    dcs = 0
-#    if not encoding.startswith('gsm'): #gsm0338 or utf_16_be
-#        dcs = 8 
-#    
-#    udh_base = ''
-#    udh = ''
-#
-#    if split > 1:
-#        udh_base = gen_udh_base()
-#        logger.debug(f"gen_udh_base: {udh_base}")
-#
-#    l_resp_msg = list() #list of dict
-#
-#    for i,part in enumerate(sms.parts):
-#        xms = part.content
-#        msgid = str(uuid4())
-#
-#        resp_msg = {"msgid": msgid, "to": msisdn}
-#        l_resp_msg.append(resp_msg)
-#
-#        if orig_udh != None and orig_udh != '':
-#            udh = orig_udh
-#            logger.info(f"keep orig UDH {udh}")
-#        
-#        #for long sms, our UDH will override orig UDH from client
-#        if udh_base != '':
-#            udh = gen_udh(udh_base,split,i+1)
-#            logger.debug(f"gen_udh: {udh}")
-#
-#        #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
-#        
-#        data = {
-#            "msgid": msgid,
-#            "sender": sender,
-#            "to": msisdn,
-#            "content": xms,
-#            "require_dlr": require_dlr,
-#            "country_id": country_id,
-#            "operator_id": operator_id,
-#            "udh": udh,
-#            "dcs": dcs,
-#            "cpg_id": cpg_id
-#        }
-#        
-#        account = arg_sms.account.dict()
-#
-#        errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
-#
-#        if errorcode == 0:
-#            pass
-#        else: #no need to process remain parts
-#            resp_json = {
-#                "errorcode": 6,
-#                "errormsg": "Internal Server Error, please contact support"
-#            }
-#            return JSONResponse(status_code=422, content=resp_json)
-#
-#            break
-#
-#    resp_json = {
-#                 'errorcode': errorcode,
-#                 'message-count': split,
-#                 'messages': l_resp_msg
-#                }
-#    logger.info("### reply client:")
-#    logger.info(json.dumps(resp_json, indent=4))
-# 
-#    return JSONResponse(status_code=200, content=resp_json)
+@app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
+async def internal_create_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Depends(myauth.allowinternal)):
+    logger.info(f"{request.url.path}: from {request.client.host}")
+    ### only allow whitelisted IP => move to myauth.allowinternal
+    # client_ip = request.client.host
+    # if not request.client.host in whitelist_ip:
+    #     raise HTTPException(status_code=401, detail=f"unauthorized access")
+        
+    d_sms = arg_sms.dict()
+    logger.info(f"debug post body")
+    logger.info(json.dumps(d_sms,indent=4))
+    
+    sender = arg_sms.sender #client may sent "from", which is alias as "sender"
+    msisdn = arg_sms.to
+    content = arg_sms.content
+    cpg_id = arg_sms.cpg_id
+
+    result = {}
+
+    ### missing parameters
+    if is_empty(sender) or is_empty(msisdn) or is_empty(content):
+        resp_json = {
+            "errorcode": 2,
+            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
+
+    ### msisdn format wrong
+    msisdn = mysms.clean_msisdn(msisdn)
+    if not msisdn:
+        resp_json = {
+            "errorcode": 2,
+            "errormsg": f"B-number {msisdn} is invalid"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
+    
+    ### sender format wrong
+    len_sender = len(sender)
+    if len_sender > max_len_tpoa:
+        resp_json= {
+            "errorcode": 4,
+            "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
+
+    ### check B-number country/operator ###
+    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
+    if parse_result:
+        country_id,operator_id = parse_result.split('---')
+    else:
+        resp_json = {
+            "errorcode": 5,
+            "errormsg": f"Receipient number {msisdn} does not belong to any network"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
+
+    ### optional param
+    require_dlr = 0 # internal call don't need to return DLR
+    orig_udh = arg_sms.udh #default None
+
+    ### get split info
+    sms = smsutil.split(content)
+    split = len(sms.parts)
+    encoding = sms.encoding
+
+    logger.info(f"counts of SMS: {split}")
+    dcs = 0
+    if not encoding.startswith('gsm'): #gsm0338 or utf_16_be
+        dcs = 8 
+    
+    udh_base = ''
+    udh = ''
+
+    if split > 1:
+        udh_base = gen_udh_base()
+        logger.debug(f"gen_udh_base: {udh_base}")
+
+    l_resp_msg = list() #list of dict
+
+    for i,part in enumerate(sms.parts):
+        xms = part.content
+        msgid = str(uuid4())
+
+        resp_msg = {"msgid": msgid, "to": msisdn}
+        l_resp_msg.append(resp_msg)
+
+        if orig_udh != None and orig_udh != '':
+            udh = orig_udh
+            logger.info(f"keep orig UDH {udh}")
+        
+        #for long sms, our UDH will override orig UDH from client
+        if udh_base != '':
+            udh = gen_udh(udh_base,split,i+1)
+            logger.debug(f"gen_udh: {udh}")
+
+        #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
+        
+        data = {
+            "msgid": msgid,
+            "sender": sender,
+            "to": msisdn,
+            "content": xms,
+            "require_dlr": require_dlr,
+            "country_id": country_id,
+            "operator_id": operator_id,
+            "udh": udh,
+            "dcs": dcs,
+            "cpg_id": cpg_id
+        }
+        
+        account = arg_sms.account.dict()
+
+        errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
+
+        if errorcode == 0:
+            pass
+        else: #no need to process remain parts
+            resp_json = {
+                "errorcode": 6,
+                "errormsg": "Internal Server Error, please contact support"
+            }
+            return JSONResponse(status_code=422, content=resp_json)
+
+            break
+
+    resp_json = {
+                 'errorcode': errorcode,
+                 'message-count': split,
+                 'messages': l_resp_msg
+                }
+    logger.info("### reply client:")
+    logger.info(json.dumps(resp_json, indent=4))
+ 
+    return JSONResponse(status_code=200, content=resp_json)
 
 
 from werkzeug.security import generate_password_hash,check_password_hash
 
-@app.post('/api/internal/login') #check webuser where deleted=0
+@app.post('/api/internal/login') #check webuser where deleted=0, and live=1
 async def verify_login(arg_login: models.InternalLogin, request:Request, response:Response):
 #async def verify_login(arg_login: models.InternalLogin, request:Request, response:Response, auth_result=Depends(myauth.allowinternal)):
     # check if username exists
     cur.execute("""select u.id as webuser_id,username,password_hash,email,bnumber,role_id,webrole.name as role_name,
     billing_id,b.billing_type,b.company_name,b.company_address,b.country,b.city,b.postal_code,b.currency from webuser u
-        left join billing_account b on u.billing_id=b.id left join webrole on u.role_id=webrole.id where username=%s and u.deleted=0
+        left join billing_account b on u.billing_id=b.id left join webrole on u.role_id=webrole.id where username=%s and u.deleted=0 and u.live=1;
         """, (arg_login.username,))
     row = cur.fetchone()
     if row:
@@ -562,11 +561,11 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.get("/api/internal/billing/") # get all billing accounts
+@app.get("/api/internal/billing") # get all billing accounts
 async def get_all_billing_accounts():
     cur.execute(f"""
     select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
-    contact_number,billing_type,currency,live from billing_account where id != 4;""")
+    contact_number,billing_type,currency,live from billing_account where id != 4 and deleted=0;""")
 
     l_data = list()
     rows = cur.fetchall()
@@ -1616,88 +1615,101 @@ async def volume_chart(
     
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.post("/api/internal/cpg_report") #optional arg: billing_id, account_id
-async def campaign_report(
-    args: models.TrafficReportRequest = Body(
-        ...,
-        examples = models.example_traffic_report_request,
-    ),
-):
-    d_arg = args.dict()
-    billing_id = d_arg.get("billing_id")
-    account_id = d_arg.get("account_id")
-    start_date = d_arg.get("start_date",None)
-    end_date = d_arg.get("end_date",None)
-    if not start_date or not end_date: #default return all campaign
-
-        sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list n               join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
-                where n.field_name='number' """
-
-    else:
-
-        sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list 
-        n join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
-        where n.field_name='number' and cpg.creation_time between '{start_date}' and '{end_date}' """
-
-    if account_id:
-        sql += f"and cpg.account_id = {account_id}"
-    elif billing_id:
-        sql += f"and cpg.billing_id = {billing_id}"
-
-    sql += "group by n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,account_name,product_name,cpg.xms;"
-    logger.info(sql)
-
-    l_data = list()
-    data = defaultdict(dict)
-
-    cur.execute(sql)
-    rows = cur.fetchall()
-    for row in rows:
-        (cpg_id,cpg_name,status,creation_time,sending_time,tpoa,company_name,account_name,product_name,content,qty_bnumber) = row
-        creation_time = creation_time.strftime("%Y-%m-%d, %H:%M:%S")
-        try:
-            sending_time = sending_time.strftime("%Y-%m-%d, %H:%M:%S")
-        except:
-            sending_time = ""
-
-        d = {
-            "cpg_id": cpg_id,
-            "cpg_name": cpg_name,
-            "status": status,
-            "creation_time": creation_time,
-            "sending_time": sending_time,
-            "tpoa": tpoa,
-            "content": content,
-            "company_name": company_name,
-            "account_name": account_name,
-            "product_name": product_name,
-            "qty_bnumber": qty_bnumber,
-        }
-    
-        l_data.append(d)
-    
-    if len(l_data) > 0:
-        resp_json = {
-            "errorcode" : 0,
-            "status": "Success",
-            "count": len(l_data),
-            "results": l_data
-        }
-    else:
-        resp_json = {
-            "errorcode": 1,
-            "status":"No Record found!"
-        }
-        return JSONResponse(status_code=404, content=resp_json)
-    
-    return JSONResponse(status_code=200, content=resp_json)
+#@app.post("/api/internal/cpg_report") #optional arg: billing_id, account_id
+#async def campaign_report(
+#    args: models.TrafficReportRequest = Body(
+#        ...,
+#        examples = models.example_traffic_report_request,
+#    ),
+#):
+#    d_arg = args.dict()
+#    billing_id = d_arg.get("billing_id")
+#    account_id = d_arg.get("account_id")
+#    start_date = d_arg.get("start_date",None)
+#    end_date = d_arg.get("end_date",None)
+#    if not start_date or not end_date: #default return all campaign
+#
+#        sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list n               join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
+#                where n.field_name='number' """
+#
+#    else:
+#
+#        sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list 
+#        n join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
+#        where n.field_name='number' and cpg.creation_time between '{start_date}' and '{end_date}' """
+#
+#    if account_id:
+#        sql += f"and cpg.account_id = {account_id}"
+#    elif billing_id:
+#        sql += f"and cpg.billing_id = {billing_id}"
+#
+#    sql += "group by n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,account_name,product_name,cpg.xms;"
+#    logger.info(sql)
+#
+#    l_data = list()
+#    data = defaultdict(dict)
+#
+#    cur.execute(sql)
+#    rows = cur.fetchall()
+#    for row in rows:
+#        (cpg_id,cpg_name,status,creation_time,sending_time,tpoa,company_name,account_name,product_name,content,qty_bnumber) = row
+#        creation_time = creation_time.strftime("%Y-%m-%d, %H:%M:%S")
+#        try:
+#            sending_time = sending_time.strftime("%Y-%m-%d, %H:%M:%S")
+#        except:
+#            sending_time = ""
+#
+#        d = {
+#            "cpg_id": cpg_id,
+#            "cpg_name": cpg_name,
+#            "status": status,
+#            "creation_time": creation_time,
+#            "sending_time": sending_time,
+#            "tpoa": tpoa,
+#            "content": content,
+#            "company_name": company_name,
+#            "account_name": account_name,
+#            "product_name": product_name,
+#            "qty_bnumber": qty_bnumber,
+#        }
+#    
+#        l_data.append(d)
+#    
+#    if len(l_data) > 0:
+#        resp_json = {
+#            "errorcode" : 0,
+#            "status": "Success",
+#            "count": len(l_data),
+#            "results": l_data
+#        }
+#    else:
+#        resp_json = {
+#            "errorcode": 1,
+#            "status":"No Record found!"
+#        }
+#        return JSONResponse(status_code=404, content=resp_json)
+#    
+#    return JSONResponse(status_code=200, content=resp_json)
 
 @app.get("/api/internal/cpg_report") #return all campaign
 async def get_all_campaign_report():
-    sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list n               join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
-                where n.field_name='number' """
+    result = func_get_campaign_report()
+    return result
 
-    sql += "group by n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,account_name,product_name,cpg.xms;"
+@app.get("/api/internal/cpg_report/{billing_id}") #return all campaign of this billing account
+async def get_campaign_report_by_billing_id(billing_id: int):
+#    sql = f"""select n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,a.name as account_name,p.name as product_name,cpg.xms,count(*) from cpg_blast_list n               join cpg on n.cpg_id=cpg.id join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id 
+#                where n.field_name='number' """
+
+#    sql += "group by n.cpg_id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,b.company_name,account_name,product_name,cpg.xms;"
+    
+    result = func_get_campaign_report(billing_id)
+    return result
+
+def func_get_campaign_report(billing_id=None):
+    sql = f"""select cpg.id,cpg.name,cpg.status,cpg.creation_time,cpg.sending_time,cpg.tpoa,cpg.xms,b.company_name,a.name as account_name,p.name as product_name from cpg join billing_account b on cpg.billing_id=b.id join account a on cpg.account_id=a.id join product p on cpg.product_id=p.id """
+    if billing_id:
+        sql += f" where cpg.billing_id={billing_id};"
     logger.info(sql)
 
     l_data = list()
@@ -1706,7 +1718,7 @@ async def get_all_campaign_report():
     cur.execute(sql)
     rows = cur.fetchall()
     for row in rows:
-        (cpg_id,cpg_name,status,creation_time,sending_time,tpoa,company_name,account_name,product_name,content,qty_bnumber) = row
+        (cpg_id,cpg_name,cpg_status,creation_time,sending_time,tpoa,content,company_name,account_name,product_name) = row
         creation_time = creation_time.strftime("%Y-%m-%d, %H:%M:%S")
         try:
             sending_time = sending_time.strftime("%Y-%m-%d, %H:%M:%S")
@@ -1716,16 +1728,32 @@ async def get_all_campaign_report():
         d = {
             "cpg_id": cpg_id,
             "cpg_name": cpg_name,
-            "status": status,
+            "status": cpg_status,
             "creation_time": creation_time,
             "sending_time": sending_time,
             "tpoa": tpoa,
             "content": content,
             "company_name": company_name,
             "account_name": account_name,
-            "product_name": product_name,
-            "qty_bnumber": qty_bnumber,
+            "product_name": product_name
         }
+
+        if cpg_status == "SENT": #check status, TBD: query from cdr_agg
+            sql = f"""select status,sum(split),sum(selling_price) from cdr where cpg_id={cpg_id} group by status;"""
+            cur.execute(sql)
+            total_qty,total_cost = 0,0
+            rows = cur.fetchall()
+            for row in rows:
+                (status,qty,cost) = row
+                if not status or status == '':
+                    status = 'Pending'
+
+                d[status] = qty
+                total_qty += qty
+                total_cost += cost
+
+            d["total_sent"] = total_qty
+            d["cost"] = f"{total_cost:,.2f}"
     
         l_data.append(d)
     

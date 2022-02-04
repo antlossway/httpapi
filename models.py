@@ -64,10 +64,9 @@ class InternalSMS(BaseModel):
                     min_length=10, max_length=20, example="96650403020")
     content: str = Field(description="SMS content. it can include any unicode defined characters in UTF-8 format",
                             example="Hello World!")
-    udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")
+    #udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")
 
     account: InternalSMS_BillingAccount
-    cpg_id: Optional[int]
 
 class InternalLogin(BaseModel):
     username: str = Field(description="username",example="admin")
