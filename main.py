@@ -373,63 +373,53 @@ async def create_campaign(
 whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
 @app.post('/api/internal/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
 async def internal_create_sms(arg_sms: models.InternalSMS, request:Request, auth_result=Depends(myauth.allowinternal)):
-    logger.info(f"{request.url.path}: from {request.client.host}")
-    ### only allow whitelisted IP => move to myauth.allowinternal
-    # client_ip = request.client.host
-    # if not request.client.host in whitelist_ip:
-    #     raise HTTPException(status_code=401, detail=f"unauthorized access")
-        
     d_sms = arg_sms.dict()
     logger.info(f"debug post body")
     logger.info(json.dumps(d_sms,indent=4))
-    
+
+
+   
     sender = arg_sms.sender #client may sent "from", which is alias as "sender"
-    msisdn = arg_sms.to
-    content = arg_sms.content
-    cpg_id = arg_sms.cpg_id
+    l_bnumber_in = d_sms.get("to", None).split(',') #comma separated bnumber for bulk process
+    content = d_sms.get("content", None)
+
+    l_bnumber = list() #to keep the final cleaned MSISDN
+    for bnumber in l_bnumber_in:
+        bnumber = mysms.clean_msisdn(bnumber)
+        if bnumber:
+            l_bnumber.append(bnumber)
+
+    if len(l_bnumber) == 0:
+        resp_json = {
+            "errorcode": 1003,
+            "errormsg": f"No valid B-number found"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
 
     result = {}
 
     ### missing parameters
-    if is_empty(sender) or is_empty(msisdn) or is_empty(content):
+    if is_empty(sender) or is_empty(content):
         resp_json = {
-            "errorcode": 2,
-            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
+            "errorcode": 1002,
+            "errormsg": "missing parameter, please check if you forget 'from' or 'content'"
         }
         return JSONResponse(status_code=422, content=resp_json)
 
-    ### msisdn format wrong
-    msisdn = mysms.clean_msisdn(msisdn)
-    if not msisdn:
-        resp_json = {
-            "errorcode": 2,
-            "errormsg": f"B-number {msisdn} is invalid"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-    
     ### sender format wrong
     len_sender = len(sender)
     if len_sender > max_len_tpoa:
         resp_json= {
-            "errorcode": 4,
+            "errorcode": 1004,
             "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
         }
         return JSONResponse(status_code=422, content=resp_json)
 
-    ### check B-number country/operator ###
-    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
-    if parse_result:
-        country_id,operator_id = parse_result.split('---')
-    else:
-        resp_json = {
-            "errorcode": 5,
-            "errormsg": f"Receipient number {msisdn} does not belong to any network"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-
     ### optional param
+    #require_dlr = arg_sms.status_report_req #default 1
+    #orig_udh = arg_sms.udh #default None
+
     require_dlr = 0 # internal call don't need to return DLR
-    orig_udh = arg_sms.udh #default None
 
     ### get split info
     sms = smsutil.split(content)
@@ -450,60 +440,93 @@ async def internal_create_sms(arg_sms: models.InternalSMS, request:Request, auth
 
     l_resp_msg = list() #list of dict
 
-    for i,part in enumerate(sms.parts):
-        xms = part.content
-        msgid = str(uuid4())
+    for bnumber in l_bnumber:
+        ### check B-number country/operator ###
+        parse_result = mysms.parse_bnumber(g_numbering_plan,bnumber)
+        if parse_result:
+            country_id,operator_id = parse_result.split('---')
 
-        resp_msg = {"msgid": msgid, "to": msisdn}
-        l_resp_msg.append(resp_msg)
+            for i,part in enumerate(sms.parts):
+                xms = part.content
+                msgid = str(uuid4())
 
-        if orig_udh != None and orig_udh != '':
-            udh = orig_udh
-            logger.info(f"keep orig UDH {udh}")
-        
-        #for long sms, our UDH will override orig UDH from client
-        if udh_base != '':
-            udh = gen_udh(udh_base,split,i+1)
-            logger.debug(f"gen_udh: {udh}")
+                resp_msg = {"msgid": msgid, "to": bnumber}
+                l_resp_msg.append(resp_msg)
 
-        #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
-        
-        data = {
-            "msgid": msgid,
-            "sender": sender,
-            "to": msisdn,
-            "content": xms,
-            "require_dlr": require_dlr,
-            "country_id": country_id,
-            "operator_id": operator_id,
-            "udh": udh,
-            "dcs": dcs,
-            "cpg_id": cpg_id
-        }
-        
-        account = arg_sms.account.dict()
+                #if orig_udh != None and orig_udh != '':
+                #    udh = orig_udh
+                #    logger.info(f"keep orig UDH {udh}")
 
-        errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM')
+                #for long sms, our UDH will override orig UDH from client
+                if udh_base != '':
+                    udh = gen_udh(udh_base,split,i+1)
+                    logger.debug(f"gen_udh: {udh}")
 
-        if errorcode == 0:
-            pass
-        else: #no need to process remain parts
-            resp_json = {
-                "errorcode": 6,
-                "errormsg": "Internal Server Error, please contact support"
-            }
-            return JSONResponse(status_code=422, content=resp_json)
+                data = {
+                    "msgid": msgid,
+                    "sender": sender,
+                    "to": bnumber,
+                    "content": xms,
+                    "udh": udh,
+                    "dcs": dcs
+                    #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
+                    #"operator_id": operator_id,
+                }
 
-            break
+                if require_dlr == 0: #by default require_dlr=1,so no need to add
+                    data["require_dlr"] = 0
+
+         #        account = {
+        #           "billing_id": int
+        #           "account_id": int
+        #           "product_id": int
+        #        }
+                account = arg_sms.account.dict()
+                account_id = account.get("account_id")
+                ## check account is SMPP or HTTP
+                sql = f"select connection_type, api_key, directory from account where id={account_id};"
+                cur.execute(sql)
+                try:
+                    row = cur.fetchone()
+                    (conn_type,api_key,directory) = row
+            
+                    if conn_type == "smpp" and os.path.isdir(directory) :
+                        logger.info(f"smpp account, call internal_create_sms_smpp({directory},{json.dumps(data,indent=4)})")
+                        errorcode = mysms.internal_create_sms_smpp(directory,data)
+                    elif api_key:
+                        acinfo = {
+                            "api_key": api_key
+                        }
+                        logger.info(f"http account, call create_sms({acinfo},{json.dumps(data,indent=4)})")
+                        errorcode = mysms.create_sms(acinfo,data)
+                except:
+                    errorcode = 1
+
+
+                if errorcode == 0:
+                    pass
+                else: #no need to process remain parts
+                    resp_json = {
+                        "errorcode": 6,
+                        "errormsg": "Internal Server Error, please contact support"
+                    }
+                    #raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
+                    return JSONResponse(status_code=422, content=resp_json)
+
+                    break
+        else:
+            logger.warning(f"Receipient number {bnumber} does not belong to any network")
+
 
     resp_json = {
                  'errorcode': errorcode,
-                 'message-count': split,
+                 'message-count': len(l_resp_msg),
                  'messages': l_resp_msg
                 }
     logger.info("### reply client:")
     logger.info(json.dumps(resp_json, indent=4))
- 
+
+    #return resp_json
     return JSONResponse(status_code=200, content=resp_json)
 
 
@@ -565,13 +588,13 @@ async def verify_login(arg_login: models.InternalLogin, request:Request, respons
 async def get_all_billing_accounts():
     cur.execute(f"""
     select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
-    contact_number,billing_type,currency,live from billing_account where id != 4 and deleted=0;""")
+    contact_number,billing_type,currency,live,ip_list from billing_account where id != 4 and deleted=0;""")
 
     l_data = list()
     rows = cur.fetchall()
     for row in rows:
         (billing_id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
-        contact_number,billing_type,currency,live) = row
+        contact_number,billing_type,currency,live,ip_list) = row
         d = {
             "billing_id": billing_id,
             "company_name": company_name,
@@ -584,7 +607,8 @@ async def get_all_billing_accounts():
             "contact_number": contact_number,
             "billing_type": billing_type,
             "currency": currency,
-            "live": live
+            "live": live,
+            "ip_list": ip_list
         }
         l_data.append(d)
     
@@ -603,19 +627,22 @@ async def get_all_billing_accounts():
             "status":f"Account Not found"
         }
         return JSONResponse(status_code=404, content=resp_json)
-    
+
+    logger.info("### reply internal UI:")
+    logger.info(json.dumps(resp_json, indent=4))
+ 
     return JSONResponse(status_code=200, content=resp_json)
 
 @app.get("/api/internal/billing/{billing_id}") # get billing account info
 async def get_billing_account_info(billing_id: int):
     cur.execute(f"""
     select id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
-    contact_number,billing_type,currency,live from billing_account where id=%s""",(billing_id,))
+    contact_number,billing_type,currency,live,ip_list from billing_account where deleted=0 and id=%s""",(billing_id,))
 
     try:
         row = cur.fetchone()
         (billing_id,company_name,company_address,country,city,postal_code,contact_name,billing_email,
-        contact_number,billing_type,currency,live) = row
+        contact_number,billing_type,currency,live,ip_list) = row
         resp_json = {
             "billing_id": billing_id,
             "company_name": company_name,
@@ -628,7 +655,8 @@ async def get_billing_account_info(billing_id: int):
             "contact_number": contact_number,
             "billing_type": billing_type,
             "currency": currency,
-            "live": live
+            "live": live,
+            "ip_list": ip_list
         }
         print(resp_json)
     except:
@@ -638,61 +666,34 @@ async def get_billing_account_info(billing_id: int):
         }
         return JSONResponse(status_code=404, content=resp_json)
 
+    logger.info("### reply internal UI:")
+    logger.info(json.dumps(resp_json, indent=4))
+ 
     return JSONResponse(status_code=200, content=resp_json)
 
 
 # use responses to add additional response like returning errors
 @app.get("/api/internal/account/{billing_id}") #get all accounts for a billing account
 def get_accounts_by_billing_id(billing_id: int):
-    cur.execute(f"""select a.billing_id,b.company_name,a.id as account_id,a.name as account_name,a.product_id,p.name as product_name,a.live,
-    a.connection_type, a.systemid,a.password,a.api_key,a.api_secret,a.callback_url,a.comment from account a join billing_account b on b.id=a.billing_id 
-    join product p on a.product_id = p.id where a.deleted=0 and a.billing_id={billing_id};""")
+    result = func_get_all_accounts(billing_id)
+    return result
 
-    l_data = list() #list of dict
-    rows = cur.fetchall()
-    for row in rows:
-    
-        (billing_id,company_name,account_id,account_name,product_id,product_name,live,connection_type,systemid,password,api_key,api_secret,callback_url,comment) = row
-        d = {
-            "billing_id": billing_id,
-            "company_name": company_name,
-            "account_id": account_id,
-            "account_name": account_name,
-            "product_id": product_id,
-            "product_name": product_name,
-            "live": live,
-            "connection_type": connection_type,
-            "systemid": systemid,
-            "password": password,
-            "api_key": api_key,
-            "api_secret": api_secret,
-            "callback_url": callback_url,
-            "comment": comment,
-        }
-        l_data.append(d)
-
-    resp_json = dict()
-
-    if len(l_data) > 0:
-        resp_json = {
-            "errorcode":0,
-            "status": "Success",
-            "results": l_data
-        }
-    else:
-        resp_json = {
-            "errorcode": 1,
-            "status":f"Account Not found for billing_id {billing_id}"
-        }
-        return JSONResponse(status_code=404, content=resp_json)
-    
-    return JSONResponse(status_code=200, content=resp_json)
 
 @app.get("/api/internal/account")#get all accounts (related to billing accounts)
 def get_all_accounts():
-    cur.execute(f"""select a.billing_id,b.company_name,a.id as account_id,a.name as account_name,a.product_id,p.name as product_name,a.live,
+    result = func_get_all_accounts()
+    return result
+
+
+def func_get_all_accounts(billing_id=None):
+    sql = """select a.billing_id,b.company_name,a.id as account_id,a.name as account_name,a.product_id,p.name as product_name,a.live,
     a.connection_type, a.systemid,a.password,a.api_key,a.api_secret,a.callback_url,a.comment from account a join billing_account b on b.id=a.billing_id 
-    join product p on a.product_id = p.id where a.deleted=0;""")
+    join product p on a.product_id = p.id where a.deleted=0"""
+
+    if billing_id:
+        sql += f"and a.billing_id={billing_id};"
+    logger.info(sql)
+    cur.execute(sql)
 
     l_data = list() #list of dict
     rows = cur.fetchall()
@@ -730,53 +731,32 @@ def get_all_accounts():
             "status":"Account Not found!"
         }
         return JSONResponse(status_code=404, content=resp_json)
-    
+
+    logger.info("### reply internal UI:")
+    logger.info(json.dumps(resp_json, indent=4))
+ 
     return JSONResponse(status_code=200, content=resp_json)
 
-@app.get("/api/internal/webuser/")#get all webusers
+@app.get("/api/internal/webuser")#get all webusers
 def get_all_webusers():
-    cur.execute(f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.id as billing_id,b.company_name,u.role_id,r.name as role_name,
-    u.live from webuser u join billing_account b on u.billing_id=b.id join webrole r on r.id=u.role_id where u.deleted=0;""")
-
-    l_data = list() #list of dict
-    rows = cur.fetchall()
-    for row in rows:
-        (webuser_id,username,email,bnumber,billing_id,company_name,role_id,role_name,live) = row
-        d = {
-            "webuser_id": webuser_id,
-            "username": username,
-            "email": email,
-            "bnumber": bnumber,
-            "billing_id": billing_id,
-            "company_name": company_name,
-            "role_id": role_id,
-            "role_name": role_name,
-            "live": live
-        }
-        l_data.append(d)
-    
-    resp_json = dict()
-
-    if len(l_data) > 0:
-        resp_json = {
-            "errorcode":0,
-            "status": "Success",
-            "results": l_data
-        }
-    else:
-        resp_json = {
-            "errorcode": 1,
-            "status":"Webuser Not found!"
-        }
-        return JSONResponse(status_code=404, content=resp_json)
-    
-    return JSONResponse(status_code=200, content=resp_json)
+    result = func_get_webusers()
+    return result
 
 @app.get("/api/internal/webuser/{billing_id}")#get all webuser of one billing account
 def get_webusers_by_billing_id(billing_id:int):
-    cur.execute(f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.company_name,u.role_id,r.name as role_name,
+
+    result = func_get_webusers(billing_id)
+    return result
+
+def func_get_webusers(billing_id=None):
+    sql = f"""select u.id as webuser_id,u.username,u.email,u.bnumber,b.company_name,u.role_id,r.name as role_name,
     u.live from webuser u join billing_account b on u.billing_id=b.id join webrole r on r.id=u.role_id 
-    where u.deleted=0 and billing_id=%s;""",(billing_id,))
+    where u.deleted=0"""
+    
+    if billing_id:
+        sql += f" and u.billing_id={billing_id};"
+    cur.execute(sql)
+    logger.info(sql)
 
     l_data = list() #list of dict
     rows = cur.fetchall()
@@ -808,7 +788,10 @@ def get_webusers_by_billing_id(billing_id:int):
             "status":"Webuser Not found!"
         }
         return JSONResponse(status_code=404, content=resp_json)
-    
+
+    logger.info("### reply internal UI:")
+    logger.info(json.dumps(resp_json, indent=4))
+  
     return JSONResponse(status_code=200, content=resp_json)
 
 def get_userid_from_username(username):
@@ -922,19 +905,19 @@ async def insert_record(
                 "status": f"missing compulsory field"
             }
             return JSONResponse(status_code=500,content=resp_json)
-    elif table == 'whitelist_ip': 
-            ## compulsory field
-            # billing_id: int
-            # webuser_id: int
-            # ipaddress: str    
-        try:
-            data_obj = models.InsertWhitelistIP(**args.dict()) #convert into defined model, removing useless field
-        except:
-            resp_json = {
-                "errorcode":2,
-                "status": f"missing compulsory field"
-            }
-            return JSONResponse(status_code=500,content=resp_json)
+#    elif table == 'whitelist_ip': 
+#            ## compulsory field
+#            # billing_id: int
+#            # webuser_id: int
+#            # ipaddress: str    
+#        try:
+#            data_obj = models.InsertWhitelistIP(**args.dict()) #convert into defined model, removing useless field
+#        except:
+#            resp_json = {
+#                "errorcode":2,
+#                "status": f"missing compulsory field"
+#            }
+#            return JSONResponse(status_code=500,content=resp_json)
     elif table == 'account':
         ##compulsory field
         #billing_id: int
@@ -1079,6 +1062,7 @@ async def insert_record(
         #raise HTTPException(status_code=500, detail={"errocode": 2, "status": f"insert DB error: {err}"})
         return JSONResponse(status_code=500, content=resp_json)      
     
+    logger.info("### reply internal insert: {json.dumps(resp_json,indent=4)}")
     return JSONResponse(status_code=200,content=resp_json)
 
 
@@ -1157,15 +1141,15 @@ async def update_record(
                 "status": f"email {email} exists"
             }
             return JSONResponse(status_code=403,content=resp_json)
-    elif table == 'whitelist_ip':
-        try:
-            data_obj = models.UpdateWhitelistIP(**args.dict()) #convert into defined model, removing useless field
-        except:
-            resp_json = {
-                "errorcode":2,
-                "status": f"missing compulsory field"
-            }
-            return JSONResponse(status_code=500,content=resp_json)
+#    elif table == 'whitelist_ip':
+#        try:
+#            data_obj = models.UpdateWhitelistIP(**args.dict()) #convert into defined model, removing useless field
+#        except:
+#            resp_json = {
+#                "errorcode":2,
+#                "status": f"missing compulsory field"
+#            }
+#            return JSONResponse(status_code=500,content=resp_json)
     elif table == 'account':
         try:
             data_obj = models.UpdateAccount(**args.dict()) #convert into defined model, removing useless field
@@ -1770,6 +1754,9 @@ def func_get_campaign_report(billing_id=None):
             "status":"No Record found!"
         }
         return JSONResponse(status_code=404, content=resp_json)
+    
+    logger.info("### reply client:")
+    logger.info(json.dumps(resp_json, indent=4))
     
     return JSONResponse(status_code=200, content=resp_json)
  

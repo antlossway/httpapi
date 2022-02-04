@@ -117,6 +117,7 @@ class InternalInsert(BaseModel): #add all possible field here, depends on differ
     #billing_email: Optional[EmailStr] => need to handle custom validate error
     currency: Optional[str]
     contact_number: Optional[str]
+    ip_list: Optional[str]
 
     ### for webuser
     username: Optional[str]
@@ -140,7 +141,7 @@ class InternalInsert(BaseModel): #add all possible field here, depends on differ
     ### common
     billing_id: Optional[int] #webuser, audit, whitelist_ip, smpp_account
     webuser_id: Optional[int] #audit
-    ipaddress: Optional[str] #whitelist_ip
+    #ipaddress: Optional[str] #whitelist_ip
     product_id: Optional[int] #account
     admin_webuser_id: Optional[int] #CMI admin webuser, to know which admin add the account
 
@@ -161,19 +162,6 @@ class InsertBillingAccount(BaseModel):
     admin_webuser_id: Optional[int] #CMI admin webuser, to know which admin add the account
     #billing_email: Optional[EmailStr] => need to handle custom validate error
     
-# class InsertAPICredential(BaseModel):
-#     ## compulsory field
-#     #webuser_id: int
-#     billing_id: int
-#     product_id: int
-#     ## optional field
-#     callback_url: Optional[str]
-#     friendly_name: Optional[str]
-#     description: Optional[str]
-#     ### API return
-#     api_key: str
-#     api_secret: str
-
 class InsertWebUser(BaseModel):
     ## compulsory field
     billing_id: int
@@ -191,10 +179,10 @@ class InsertAudit(BaseModel):
     webuser_id: int
     auditlog: str
 
-class InsertWhitelistIP(BaseModel):
-    ### for whitelist_ip
-    billing_id: int
-    ipaddress: str
+#class InsertWhitelistIP(BaseModel):
+#    ### for whitelist_ip
+#    billing_id: int
+#    ipaddress: str
 
 class InsertSMPPAccount(BaseModel):
     billing_id: int
@@ -235,7 +223,8 @@ example_internal_insert={
             "postal_code":"123456",
             "billing_email":"billing@abc.com,contact@abc.com",
             "currency":"USD",
-            "admin_webuser_id": 1
+            "admin_webuser_id": 1,
+            "ip_list": "10.10.10.1,10.10.101.1"
         },
     },
     "webuser": {
@@ -260,14 +249,14 @@ example_internal_insert={
             "auditlog": "access report"
         },
     },
-    "whitelist_ip": {
-        "summary": "insert into whitelist_ip",
-        "value":{
-            "table": "whitelist_ip",
-            "billing_id": 1001,
-            "ipaddress": "192.168.0.1"
-        },
-    },
+#    "whitelist_ip": {
+#        "summary": "insert into whitelist_ip",
+#        "value":{
+#            "table": "whitelist_ip",
+#            "billing_id": 1001,
+#            "ipaddress": "192.168.0.1"
+#        },
+#    },
     "smpp account": {
         "summary": "insert into account, connection_type=smpp",
         "description": "admin create smpp account for client, API return systemid/password",
@@ -312,14 +301,17 @@ class InternalUpdate(BaseModel): #add all possible field here, depends on differ
     billing_type: Optional[str]
     currency: Optional[str]
     contact_number: Optional[str]
+    ip_list: Optional[str]
+
     ### for webuser
     username: Optional[str]
     password_hash: Optional[str]
     email: Optional[str]
     role_id: Optional[int]
     bnumber: Optional[str]
+
     ### for whitelist_ip and smpp_account
-    ipaddress: Optional[str]
+    #ipaddress: Optional[str]
     ### for account
     name: Optional[str]
     comment: Optional[str]
@@ -353,7 +345,8 @@ example_internal_update={
             "currency":"USD",
             "admin_webuser_id": 1,
             "live": 1,
-            "deleted": 0
+            "deleted": 0,
+            "ip_list": "10.10.10.1,10.10.101.1"
         },
     },
     "webuser": {
@@ -371,15 +364,15 @@ example_internal_update={
             "admin_webuser_id": 1,
         },
     },
-    "whitelist_ip": {
-        "summary": "update whitelist_ip",
-        "value": {
-            "table": "whitelist_ip",
-            "id": 1,
-            "ipaddress": "192.168.0.1",
-            "deleted": 0
-        },
-    },
+#    "whitelist_ip": {
+#        "summary": "update whitelist_ip",
+#        "value": {
+#            "table": "whitelist_ip",
+#            "id": 1,
+#            "ipaddress": "192.168.0.1",
+#            "deleted": 0
+#        },
+#    },
     "smpp account": {
         "summary": "update account with connection_type=smpp",
         "value": {
@@ -445,9 +438,9 @@ class UpdateWebUser(BaseModel):
     live: Optional[int]
     admin_webuser_id: Optional[int] #CMI admin webuser, to know which admin add the account
 
-class UpdateWhitelistIP(BaseModel):
-    ipaddress: Optional[str]
-    deleted: Optional[int]
+#class UpdateWhitelistIP(BaseModel):
+#    ipaddress: Optional[str]
+#    deleted: Optional[int]
 
 # class UpdateSMPPAccount(BaseModel):
 #     product_id: Optional[int]

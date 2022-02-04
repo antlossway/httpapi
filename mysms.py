@@ -115,11 +115,12 @@ def create_sms_file(outdir,sender,to,xms,msgid,dcs,udh,require_dlr):
     output = os.path.join(outdir, f"xms{msgid}")
     tmpoutput = "tmp-" + output
     error = 0
-    notif1_dir = "/tmp/notif1"
-    
+    notif1_dir = "/home/amx/notif1"
+
+    subdir = re.sub(r'.*\/', '',outdir)
 
     """create notif1 file, empty file"""
-    notif1 = f"{notif1_dir}/{uc_acname}/{uc_acname}---{to}---{msgid}---"
+    notif1 = f"{notif1_dir}/{subdir}/{subdir}---{to}---{msgid}---"
     logger.info(f"create notif1 {notif1}")
     try:
         with open(notif1,'w') as w:
@@ -207,6 +208,68 @@ def create_sms_ameex(ac,data,provider): #post SMS to Ameex A2P API
 
     return res_error,res_msgid
     
+def internal_create_sms_smpp(outdir,data):
+#                data = {
+#                    "msgid": msgid,
+#                    "sender": sender,
+#                    "to": bnumber,
+#                    "content": xms,
+#                    "udh": udh,
+#                    "dcs": dcs
+#               }
+
+        #check if account is SMPP or HTTP
+    msgid = data.get("msgid")
+    bnumber = data.get("to")
+    output = os.path.join(outdir, f"xms{msgid}")
+    tmpoutput = os.path.join(outdir, f"tmp-xms{msgid}")
+    error = 0
+    notif1_dir = "/home/amx/notif1"
+    
+    subdir = re.sub(r'.*\/', '',outdir)
+
+    """create notif1 file, empty file"""
+    tmpnotif1 = f"{notif1_dir}/{subdir}/tmp-{subdir}---{bnumber}---{msgid}---"
+    notif1 = f"{notif1_dir}/{subdir}/{subdir}---{bnumber}---{msgid}---"
+ 
+    logger.info(f"create notif1 {notif1}")
+    try:
+        with open(tmpnotif1,'w') as w: #empty file
+            pass
+        os.rename(tmpnotif1,notif1)
+    except IOError as e:
+        logger.info(e)
+        error = 1001
+    except:
+        logger.info(f"something bad happen,can not create {tmpoutput}")
+        error = 1001
+    if error != 0:
+        return error
+
+    """create SMS file"""
+    try:
+        with open(tmpoutput,'w', encoding='utf-8') as w:
+            w.write("; encoding=UTF-8\n")
+            w.write(f"[{subdir}]\n")
+            w.write(f"DCS={data.get('dcs')}\n")
+            w.write(f"Phone={bnumber}\n")
+            w.write(f"OriginatingAddress={data.get('sender')}\n")
+            w.write(f"LocalId={msgid}\n")
+            w.write(f"MsgId={msgid}\n")
+            w.write(f"XMS={data.get('content')}\n")
+            w.write(f"StatusReportRequest=True\n") #always require DLR from our supplier
+
+        os.rename(tmpoutput,output)
+        logger.info(f"created {output}")
+    except IOError as e:
+        logger.info(e)
+        error = 1001
+    except:
+        logger.warning(f"something bad happen,can not create {tmpoutput}")
+        error = 1001
+    finally:
+        return error
+
 
 ## call HTTP API on a2p server
 def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms info
