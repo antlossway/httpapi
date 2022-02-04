@@ -16,7 +16,7 @@ security = HTTPBasic()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 auth_file = os.path.join(basedir, ".htaccess")
-whitelist_ip = ['127.0.0.1','localhost','13.214.145.167']
+whitelist_ip = ['127.0.0.1','localhost','13.214.145.167','95.216.217.218']
 
 ## test only 
 users = {
