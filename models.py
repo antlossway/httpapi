@@ -16,15 +16,14 @@ class SMS(BaseModel):
 
     udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")
 
-#    class Config:
-#        schema_extra = {
-#            "example": {
-#                "name": "Foo",
-#                "description": "A very nice Item",
-#                "price": 35.4,
-#                "tax": 3.2,
-#        }
-#    }
+    class Config:
+        schema_extra = {
+            "example": {
+                "sender": "Foo",
+                "to": "6588001000",
+                "content": "Have a nice day!"
+        }
+    }
 
 class Msg(BaseModel):
     msgid: str = Field(description="unique message ID to identify an created SMS",example="77b16382-7871-40bd-a1ac-a26c6ccce687")
@@ -54,14 +53,14 @@ class InternalNewCampaign(BaseModel):
     product_id: int
 
 class InternalSMS_BillingAccount(BaseModel):
-    billing_id: int
+#    billing_id: int
     account_id: int
-    product_id: int
+#    product_id: int
 
 class InternalSMS(BaseModel):
     sender: str = Field(alias='from',description="SenderID", min_length=2, max_length=11, example="Example") 
     to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
-                    min_length=10, max_length=20, example="96650403020")
+                    min_length=10, max_length=20, example="6588001000")
     content: str = Field(description="SMS content. it can include any unicode defined characters in UTF-8 format",
                             example="Hello World!")
     #udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")

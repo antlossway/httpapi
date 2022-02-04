@@ -477,9 +477,7 @@ async def internal_create_sms(arg_sms: models.InternalSMS, request:Request, auth
                     data["require_dlr"] = 0
 
          #        account = {
-        #           "billing_id": int
         #           "account_id": int
-        #           "product_id": int
         #        }
                 account = arg_sms.account.dict()
                 account_id = account.get("account_id")
