@@ -485,20 +485,38 @@ async def internal_create_sms(arg_sms: models.InternalSMS, request:Request, auth
                 account_id = account.get("account_id")
                 ## check account is SMPP or HTTP
                 sql = f"select connection_type, api_key, directory from account where id={account_id};"
+                logger.info(sql)
                 cur.execute(sql)
+                errorcode = 0
                 try:
                     row = cur.fetchone()
+                    logger.info(row)
                     (conn_type,api_key,directory) = row
             
-                    if conn_type == "smpp" and os.path.isdir(directory) :
-                        logger.info(f"smpp account, call internal_create_sms_smpp({directory},{json.dumps(data,indent=4)})")
-                        errorcode = mysms.internal_create_sms_smpp(directory,data)
+                    if conn_type == "smpp":
+                        if os.path.isdir(directory) :
+                            logger.info(f"smpp account, call internal_create_sms_smpp({directory},{json.dumps(data,indent=4)})")
+                            errorcode = mysms.internal_create_sms_smpp(directory,data)
+                        else:
+                            logger.warning(f"{directory} is not yet created, wait for cronjob to creat it before making test")
+                            resp_json = {
+                                "errorcode": 5,
+                                "errormsg": "SMPP directory not yet created, wait a few min before making test"
+                            }
+                            return JSONResponse(status_code=404, content=resp_json)
                     elif api_key:
                         acinfo = {
                             "api_key": api_key
                         }
                         logger.info(f"http account, call create_sms({acinfo},{json.dumps(data,indent=4)})")
                         errorcode = mysms.create_sms(acinfo,data)
+                    else:
+                        resp_json = {
+                            "errorcode": 4,
+                            "errormsg": "http account has no api_key, please contact support"
+                        }
+                        return JSONResponse(status_code=404, content=resp_json)
+
                 except:
                     errorcode = 1
 

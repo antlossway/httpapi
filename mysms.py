@@ -221,8 +221,6 @@ def internal_create_sms_smpp(outdir,data):
         #check if account is SMPP or HTTP
     msgid = data.get("msgid")
     bnumber = data.get("to")
-    output = os.path.join(outdir, f"xms{msgid}")
-    tmpoutput = os.path.join(outdir, f"tmp-xms{msgid}")
     error = 0
     notif1_dir = "/home/amx/notif1"
     
@@ -239,14 +237,16 @@ def internal_create_sms_smpp(outdir,data):
         os.rename(tmpnotif1,notif1)
     except IOError as e:
         logger.info(e)
-        error = 1001
+        error = 7 
     except:
         logger.info(f"something bad happen,can not create {tmpoutput}")
-        error = 1001
+        error = 7
     if error != 0:
         return error
 
     """create SMS file"""
+    tmpoutput = os.path.join(outdir, f"tmp-xms{msgid}")
+    output = os.path.join(outdir, f"xms{msgid}")
     try:
         with open(tmpoutput,'w', encoding='utf-8') as w:
             w.write("; encoding=UTF-8\n")
@@ -263,10 +263,10 @@ def internal_create_sms_smpp(outdir,data):
         logger.info(f"created {output}")
     except IOError as e:
         logger.info(e)
-        error = 1001
+        error = 7
     except:
         logger.warning(f"something bad happen,can not create {tmpoutput}")
-        error = 1001
+        error = 7
     finally:
         return error
 
