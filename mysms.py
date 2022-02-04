@@ -18,8 +18,8 @@ example_create_sms={
         "summary": "example with short SMS",
         "description": "Short SMS, 1-part, max 160 GSM-7bit characters or max 70 USC-2 encoded caracters",
         "value": {
-            "from": "NOC",
-            "to": "971508020179",
+            "from": "Short",
+            "to": "6588001000",
             "content": "Hello World!"
         },
     },
@@ -27,9 +27,18 @@ example_create_sms={
         "summary": "example with long SMS",
         "description": "Concatenated SMS,a long SMS segemented into mutliple part,each part is charged as separate SMS",
         "value": {
-            "from": "NOC",
-            "to": "971508020179",
+            "from": "Long",
+            "to": "6588001000",
             "content": "A man being mugged by two thugs put up a tremendous fight! Finally, the thugs subdued him and took his wallet. Upon finding only two dollars in the wallet, the surprised thug said \"Why did you put up such a fight?\" To which the man promptly replied \"I was afraid that you would find the $200 hidden in my shoe!\""
+        },
+    },
+    "bulk": {
+        "summary": "bulk example: send SMS to multiple numbers",
+        "description": "comma separarated MSISDN list",
+        "value": {
+            "from": "BulkSMS",
+            "to": "6588001000,6599000100",
+            "content": "Hello World!"
         },
     },
 }
@@ -49,7 +58,7 @@ example_create_sms_response = {
                             "messages": [
                                 {
                                     "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
-                                    "to": "971508020179"
+                                    "to": "6588001000"
                                 }
                             ]
                         },
@@ -63,19 +72,38 @@ example_create_sms_response = {
                             "messages": [
                                 {
                                     "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
-                                    "to": "971508020179"
+                                    "to": "6588001000"
                                 },
                                 {
                                     "msgid": "9d316085-cc29-4fb6-9522-6ad8748fcb89",
-                                    "to": "971508020179"
+                                    "to": "6588001000"
                                 },
                                 {
                                     "msgid": "def6196e-3b73-4a1a-9d1b-f46cbf139645",
-                                    "to": "971508020179"
+                                    "to": "6588001000"
                                 }
                             ]
                         },
-                    },
+                    }, # concatenated
+                    "bulk": {
+                        "summary": "bulk example: send SMS to multiple numbers",
+                        #"description": "Concatenated SMS,a long SMS segemented into mutliple part,each part is charged as separate SMS",
+                        "value": {
+                            "errorcode": 0,
+                            "message-count": 2,
+                            "messages": [
+                                {
+                                    "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
+                                    "to": "6588001000"
+                                },
+                                {
+                                    "msgid": "9d316085-cc29-4fb6-9522-6ad8748fcb89",
+                                    "to": "6599000100"
+                                }
+                            ]
+                        },
+                    }, # concatenated
+
                 },
             },
         },

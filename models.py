@@ -6,8 +6,8 @@ from datetime import datetime
 class SMS(BaseModel): 
     #"from" is the public name of the field, can not use "from" direct as a field name in basemodel because it is keyword in python
     sender: str = Field(alias='from',description="SenderID", min_length=2, max_length=11, example="Example") 
-    to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
-                    min_length=10, max_length=20, example="96650403020")
+    to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format, multiple numbers should be separated by comma", 
+                    example="6588001000")
     content: str = Field(description="SMS content. it can include any unicode defined characters in UTF-8 format",
                             example="Hello World!")
     base64url: Optional[int] = Field(default=0,description="to declare that content is base64url encoded. \
@@ -16,6 +16,16 @@ class SMS(BaseModel):
 
     udh: Optional[str] = Field(default="", description="for concatenated SMS, can specify udh here")
 
+#    class Config:
+#        schema_extra = {
+#            "example": {
+#                "name": "Foo",
+#                "description": "A very nice Item",
+#                "price": 35.4,
+#                "tax": 3.2,
+#        }
+#    }
+
 class Msg(BaseModel):
     msgid: str = Field(description="unique message ID to identify an created SMS",example="77b16382-7871-40bd-a1ac-a26c6ccce687")
     to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
@@ -23,11 +33,11 @@ class Msg(BaseModel):
 
 class SMSResponse(BaseModel):
     errorcode: int = Field(description="indicate result of creating SMS, 0 means successful", default=0)
-    message_count: int = Field(alias="message-count",description="indicate the number of SMS created (for concatenated SMS)", default=1)
+    message_count: int = Field(alias="message-count",description="indicate the number of SMS created (for concatenated SMS or bulk SMS)", default=1)
     messages: List[Msg]
 
 class CallbackDLR(BaseModel):
-    msisdn: str = Field(example='658712371')
+    msisdn: str = Field(example='6588001000')
     to: Optional[str] = Field(example='INFO')
     msgid: str = Field(example="EOURQwerewrhoi23")
     status: str = Field(example="DELIVERD")

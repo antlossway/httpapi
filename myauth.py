@@ -129,10 +129,10 @@ def myauth_basic_authfile(request:Request, credentials: HTTPBasicCredentials = D
 
     l_ips = d_ips.get(api_key,None)
     if l_ips and len(l_ips) > 0:
-        ### check if IP is whitelisted, to be enabled later
-#        if not orig_ip in l_ips and not orig_ip in whitelist_ip:
-#            logger.warning(f"{orig_ip} is not whitelisted for {api_key}")
-#            return False
+        ### check if IP is whitelisted
+        if not orig_ip in l_ips and not orig_ip in whitelist_ip:
+            logger.warning(f"{orig_ip} is not whitelisted for {api_key}")
+            return False
 
         ### IP is whitelisted, now check if api_secret match
         expected_secret = d_secret.get(api_key,None)
@@ -152,12 +152,56 @@ def myauth_basic_authfile(request:Request, credentials: HTTPBasicCredentials = D
 
     return False
 
+### /api/test/sms: for developer to test create-sms from UI, no soure IP checking because browser IP can be anything. no sms will be created
+def myauth_basic_authfile_test(request:Request, credentials: HTTPBasicCredentials = Depends(security)):
+    orig_ip = request.client.host
+    api_key = credentials.username
+
+    d_secret,d_ips = read_auth()
+    logger.debug(f"debug: client IP: {orig_ip}, d_secret: {json.dumps(d_secret, indent=4)}, d_ips: {json.dumps(d_ips, indent=4)}")
+
+    if not api_key in d_secret:
+        logger.warning("debug: no account found for api_key {api_key}")
+        return False
+    
+    ### no IP checking, only check if api_secret match
+    expected_secret = d_secret.get(api_key,None)
+    if expected_secret:
+        logger.debug(f"debug: account found with api_key {api_key}, expected_secret: {expected_secret}, received_secret: {credentials.password}")
+        password_match = secrets.compare_digest(credentials.password, expected_secret)
+
+        if password_match:
+            ac = {"api_key": api_key}
+            return ac
+        else:
+            logger.warning("!!! api_secret does not match")
+    else:
+        logger.warning("!!! no api_secret found")
+
+
+    return False
+
 
 def myauth_jwt():
     return False
 
 #async def authenticate(basic_result=Depends(myauth_basic), jwt_result=Depends(myauth_jwt)):
 async def authenticate(basic_result=Depends(myauth_basic_authfile), jwt_result=Depends(myauth_jwt)):
+    if not (basic_result or jwt_result):
+        logger.debug("debug: none of the auth method pass")
+
+        raise HTTPException(
+            status_code=401, #unauthorized
+            detail="Incorrect credential or non-whitelisted IP"
+        )
+    else:
+        logger.debug("debug: one of the auth method pass")
+        if basic_result:
+            return basic_result
+        else:
+            return jwt_result
+
+async def authenticate_test(basic_result=Depends(myauth_basic_authfile_test), jwt_result=Depends(myauth_jwt)):
     if not (basic_result or jwt_result):
         logger.debug("debug: none of the auth method pass")
 

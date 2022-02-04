@@ -35,9 +35,51 @@ max_len_tpoa = 11
 
 redis_status_expire = 15*24*3600 # STATUS:<msgid1> => <status> for /sms/:msgid query_dlr
 
-app = FastAPI(docs_url='/api/docs', 
-            redoc_url='/api/redoc',
-            openapi_url='/api/openapi.json'
+desc = """
+**REST API helps you to send all types of SMS and check delivery status.**\n
+Delivery status can also be pushed to client’s WebHook (HTTP(S) callback).\n
+Mobile Numbers are specified in E.164 format (International format including country code).\n
+HTTP Request body and response use JSON format.\n
+Each request requires a BASIC authentication(api_key/api_secret) with IP whitelisting.
+
+## Create SMS (production)
+
+POST /api/sms
+
+## Create SMS (Test only)
+This is to help developer test request/response, no SMS is really created or charged
+
+POST /api/test/sms
+
+## Query Status
+
+GET /api/sms/{msgid}
+"""
+
+tags_metadata = [
+    {
+        "name": "Test Create SMS",
+        "description": "This is to help developer test request/response, no SMS is really created or charged, will not filter IP",
+    },
+    {
+        "name": "Create SMS",
+        "description": "production endpoint to send SMS, basic authentication + IP whitelisting are required",
+        #"externalDocs": {
+        #    "description": "Items external docs",
+        #    "url": "https://fastapi.tiangolo.com/",
+        #},
+    },
+]
+
+app = FastAPI(
+    title="CMI SMS API",
+    description=desc,
+    openapi_tags=tags_metadata,
+    version="0.1.0",
+    #terms_of_service="http://example.com/terms/",
+    docs_url='/api/docs', 
+    redoc_url='/api/redoc',
+    openapi_url='/api/openapi.json'
 
 )
 
@@ -47,23 +89,35 @@ def is_empty(field):
         return True
     return False
 
-@app.get('/')
-async def home():
-    return {'result': 'hello'}
+#@app.get('/')
+#async def home():
+#    return {'result': 'hello'}
 
-@app.post('/api/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response)
+@app.post('/api/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response, tags=["Create SMS"])
 #async def post_sms(response: Response,
-async def post_sms(request: Request,
+async def create_sms(request: Request,
                 arg_sms: models.SMS = Body(
                     ...,
                     examples=mysms.example_create_sms,
                 ),
-#account: str = Depends(myauth.myauth_basic) 
 account=Depends(myauth.authenticate) # multiple authentication methods, account is dict including many info
 ):
-
+    result = post_sms(request,account,arg_sms,"prod")
+    return result
+ 
+@app.post('/api/test/sms', response_model=models.SMSResponse, responses=mysms.example_create_sms_response, tags=["Test Create SMS"])
+async def test_create_sms(request: Request,
+                arg_sms: models.SMS = Body(
+                    ...,
+                    examples=mysms.example_create_sms,
+                ),
+account=Depends(myauth.authenticate_test) # allow developer to 
+):
+    result = post_sms(request,account,arg_sms,"test")
+    return result
+ 
+def post_sms(request: Request,account,arg_sms,mode):
     logger.info(request.headers) #debug raw request
-    logger.info(f"{request.url.path}: from {request.client.host}")
     d_sms = arg_sms.dict()
 
     logger.info(f"debug post body")
@@ -71,46 +125,38 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
         logger.info(f"{k}: {v}({type(v)})")
     
     sender = d_sms.get("sender", None) #client may sent "from", which is alias as "sender"
-    msisdn = d_sms.get("to", None)
+    l_bnumber_in = d_sms.get("to", None).split(',') #comma separated bnumber for bulk process
     content = d_sms.get("content", None)
+
+    l_bnumber = list() #to keep the final cleaned MSISDN
+    for bnumber in l_bnumber_in:
+        bnumber = mysms.clean_msisdn(bnumber)
+        if bnumber:
+            l_bnumber.append(bnumber)
+
+    if len(l_bnumber) == 0:
+        resp_json = {
+            "errorcode": 1003,
+            "errormsg": f"No valid B-number found"
+        }
+        return JSONResponse(status_code=422, content=resp_json)
     
     result = {}
 
     ### missing parameters
-    if is_empty(sender) or is_empty(msisdn) or is_empty(content):
+    if is_empty(sender) or is_empty(content):
         resp_json = {
-            "errorcode": 2,
-            "errormsg": "missing parameter, please check if you forget 'from','to',or 'content'"
+            "errorcode": 1002,
+            "errormsg": "missing parameter, please check if you forget 'from' or 'content'"
          }
         return JSONResponse(status_code=422, content=resp_json)
 
-    ### msisdn format wrong
-    msisdn = mysms.clean_msisdn(msisdn)
-    if not msisdn:
-        resp_json = {
-            "errorcode": 2,
-            "errormsg": f"B-number {msisdn} is invalid"
-        }
-        #raise HTTPException(status_code=422, detail=f"B-number {msisdn} is invalid")
-        return JSONResponse(status_code=422, content=resp_json)
-    
     ### sender format wrong
     len_sender = len(sender)
     if len_sender > max_len_tpoa:
         resp_json = {
-            "errorcode": 4,
+            "errorcode": 1004,
             "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
-        }
-        return JSONResponse(status_code=422, content=resp_json)
-
-    ### check B-number country/operator ###
-    parse_result = mysms.parse_bnumber(g_numbering_plan,msisdn)
-    if parse_result:
-        country_id,operator_id = parse_result.split('---')
-    else:
-        resp_json = {
-            "errorcode": 5,
-            "errormsg": f"Receipient number {msisdn} does not belong to any network"
         }
         return JSONResponse(status_code=422, content=resp_json)
 
@@ -142,67 +188,70 @@ account=Depends(myauth.authenticate) # multiple authentication methods, account 
 
     l_resp_msg = list() #list of dict
 
-    for i,part in enumerate(sms.parts):
-        xms = part.content
-        msgid = str(uuid4())
+    for bnumber in l_bnumber:
+        ### check B-number country/operator ###
+        parse_result = mysms.parse_bnumber(g_numbering_plan,bnumber)
+        if parse_result:
+            country_id,operator_id = parse_result.split('---')
 
-        resp_msg = {"msgid": msgid, "to": msisdn}
-        l_resp_msg.append(resp_msg)
-
-        if orig_udh != None and orig_udh != '':
-            udh = orig_udh
-            logger.info(f"keep orig UDH {udh}")
+            for i,part in enumerate(sms.parts):
+                xms = part.content
+                msgid = str(uuid4())
         
-        #for long sms, our UDH will override orig UDH from client
-        if udh_base != '':
-            udh = gen_udh(udh_base,split,i+1)
-            logger.debug(f"gen_udh: {udh}")
-
-        #errorcode = mysms.create_sms_file(account,sender,msisdn,xms,msgid,dcs,udh,require_dlr)
+                resp_msg = {"msgid": msgid, "to": bnumber}
+                l_resp_msg.append(resp_msg)
         
-        data = {
-            "msgid": msgid,
-            "sender": sender,
-            "to": msisdn,
-            "content": xms,
-            "udh": udh,
-            "dcs": dcs
-            #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
-            #"operator_id": operator_id,
-        }
+                if orig_udh != None and orig_udh != '':
+                    udh = orig_udh
+                    logger.info(f"keep orig UDH {udh}")
+                
+                #for long sms, our UDH will override orig UDH from client
+                if udh_base != '':
+                    udh = gen_udh(udh_base,split,i+1)
+                    logger.debug(f"gen_udh: {udh}")
+                
+                data = {
+                    "msgid": msgid,
+                    "sender": sender,
+                    "to": bnumber,
+                    "content": xms,
+                    "udh": udh,
+                    "dcs": dcs
+                    #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
+                    #"operator_id": operator_id,
+                }
+                
+                if require_dlr == 0: #by default require_dlr=1,so no need to add
+                    data["require_dlr"] = 0
+                
+        #        account = {
+        #        "api_key": api_key,
+        #        }
         
-        if require_dlr == 0: #by default require_dlr=1,so no need to add
-            data["require_dlr"] = 0
+                if mode == "test":
+                    errorcode = 0
+                    logger.info("Test only, don't create SMS")
+                else:
+                    errorcode = mysms.create_sms(account,data)
         
-#        account = {
-#        "api_key": api_key,
-#        "api_secret": api_secret,
-#        "account_id": account_id,
-#        "billing_id": billing_id,
-#        "company_name": company_name,
-#        "product_id": product_id,
-#        "product_name": product_name,
-#        "callback_url": callback_url
-#        }
-
-        #errorcode = mysms.create_sms(account,data,'AMEEX_PREMIUM') ## API don't care routing, let qrouter take care
-        errorcode = mysms.create_sms(account,data)
-
-        if errorcode == 0:
-            pass
-        else: #no need to process remain parts
-            resp_json = {
-                "errorcode": 6,
-                "errormsg": "Internal Server Error, please contact support"
-            }
-            #raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
-            return JSONResponse(status_code=422, content=resp_json)
-
-            break
+                if errorcode == 0:
+                    pass
+                else: #no need to process remain parts
+                    resp_json = {
+                        "errorcode": 6,
+                        "errormsg": "Internal Server Error, please contact support"
+                    }
+                    #raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
+                    return JSONResponse(status_code=422, content=resp_json)
+        
+                    break
+        else:
+            logger.warning(f"Receipient number {bnumber} does not belong to any network")
+             
 
     resp_json = {
                  'errorcode': errorcode,
-                 'message-count': split,
+                 'message-count': len(l_resp_msg),
                  'messages': l_resp_msg
                 }
     logger.info("### reply client:")
