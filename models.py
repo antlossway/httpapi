@@ -161,6 +161,7 @@ class InsertBillingAccount(BaseModel):
     contact_number: Optional[str]
     admin_webuser_id: Optional[int] #CMI admin webuser, to know which admin add the account
     #billing_email: Optional[EmailStr] => need to handle custom validate error
+    ip_list: Optional[str]
     
 class InsertWebUser(BaseModel):
     ## compulsory field
@@ -414,6 +415,7 @@ class UpdateBillingAccount(BaseModel):
     admin_webuser_id: Optional[int] #CMI admin webuser, to know which admin add the account
     live: Optional[int]
     deleted: Optional[int]
+    ip_list: Optional[str]
     
 # class UpdateAPICredential(BaseModel):
 #     api_key: Optional[str]
