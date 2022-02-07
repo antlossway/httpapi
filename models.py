@@ -35,6 +35,18 @@ class SMSResponse(BaseModel):
     message_count: int = Field(alias="message-count",description="indicate the number of SMS created (for concatenated SMS or bulk SMS)", default=1)
     messages: List[Msg]
 
+
+### reply query status from our HTTP client
+class QueryStatusResponse(BaseModel):
+    msisdn: str = Field(example='6588001000')
+    to: Optional[str] = Field(example='INFO')
+    msgid: str = Field(example="EOURQwerewrhoi23")
+    status: str = Field(example="DELIVERD")
+    #dlr_timestamp: Optional[str] = Field(alias="dlr-timestamp", example="2022-01-29 00:00")
+    timestamp: Optional[str] = Field(example="2022-02-01 00:00")
+
+
+### this is to receive DLR from HTTP provider
 class CallbackDLR(BaseModel):
     msisdn: str = Field(example='6588001000')
     to: Optional[str] = Field(example='INFO')
@@ -100,7 +112,7 @@ class GetAuditResponse(BaseModel):
 
 class MsgNotFound(BaseModel):
     errorcode: int=1
-    status: str = Field(default="Not found!")
+    errormsg: str = Field(default="Not found!")
 
 class InternalInsert(BaseModel): #add all possible field here, depends on different table, some field may be null in request body
     table: str= Field(description="name of table")
@@ -553,3 +565,4 @@ example_transaction_report_request = {
         },
     },
 }
+

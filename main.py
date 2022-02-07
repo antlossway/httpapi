@@ -69,6 +69,10 @@ tags_metadata = [
         #    "url": "https://fastapi.tiangolo.com/",
         #},
     },
+    {
+        "name": "Query SMS Status",
+        "description": "Client can query individule SMS's delivery status by providing msgid",
+    },
 ]
 
 app = FastAPI(
@@ -1304,7 +1308,7 @@ async def get_auditlog_by_billing_id(billing_id:int):
     else:
         resp_json = {
             "errorcode": 1,
-            "status":"Auditlog Not found!"
+            "errormsg":"Auditlog Not found!"
         }
         return JSONResponse(status_code=404, content=resp_json)
     
@@ -1775,4 +1779,52 @@ def func_get_campaign_report(billing_id=None):
     logger.info(json.dumps(resp_json, indent=4))
     
     return JSONResponse(status_code=200, content=resp_json)
+
+#### query SMS status
+@app.get('/api/sms/{msgid}', response_model=models.QueryStatusResponse, 
+         responses={404: {"model": models.MsgNotFound}},
+         tags=["Query SMS Status"])
+async def query_sms_status(msgid: str, account=Depends(myauth.authenticate) # multiple authentication methods, account is dict including many info
+):
+    ### check if redis has cache
+    index = f"STATUS:{msgid}"
+    res = r.hgetall(index)
+    d_res = { k.decode('utf-8'): res.get(k).decode('utf-8') for k in res.keys() }
+
+    print(f"get status for {index}, result: {json.dumps(d_res,indent=4)}")
+
+    ### either Pending or redis cache expired, query postgreSQL
+    if len(d_res) == 0:
+        logger.info(f"redis {index} does not exist, maybe still pending or redis expire, check cdr table")
+        cur.execute("select tpoa,bnumber,status,notif3_dbtime from cdr where msgid=%s", (msgid,))
+        row = cur.fetchone()
+        try:
+            (tpoa,bnumber,status,notif3_dbtime) = row
+    
+            if not status or status == '':
+                status = 'Pending'
+                timestamp = ""
+            else:
+                timestamp = notif3_dbtime.strftime("%Y-%m-%d, %H:%M:%S")
+    
+            resp_json = {
+                "msisdn": bnumber,
+                "to": tpoa,
+                "msgid": msgid,
+                "status": status,
+                "timestamp": timestamp
+            }
+        except: # no record found in postgreSQL cdr table
+            resp_json = {
+                "errorcode": 1006,
+                "errormsg": "MsgID not found"
+            }
+            return JSONResponse(status_code=404, content=resp_json)
+
+    else:
+       resp_json = d_res
+    
+    return JSONResponse(status_code=200, content=resp_json)
+    
+       
  
