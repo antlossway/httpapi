@@ -37,7 +37,7 @@ max_len_tpoa = 11
 redis_status_expire = 15*24*3600 # STATUS:<msgid1> => <status> for /sms/:msgid query_dlr
 
 desc = """
-**REST API helps you to send all types of SMS and query delivery status.**\n
+**Our REST API is using OpenAPI standard. It allows you to send SMS and query delivery status.**\n
 Delivery Report can also be pushed to client’s WebHook (HTTP(S) callback).\n
 Mobile Numbers are specified in E.164 format (International format including country code).\n
 HTTP Request and Response Body use JSON format.\n
@@ -66,7 +66,7 @@ Require Basic Authentication, no IP filtering
 
 
 ## Test Delivery Report(DR) Callback (Test only)
-The Customer need to deploy an HTTP(S) server to receive DR receipt pushed from our CloudPlatform.\n
+The Customer need to deploy an HTTP(S) server to receive DR receipt pushed from our CloudSMS Platform.\n
 This endpoint is to help you to test the format of push DR that is posted to the callback_url you provided.
 
 In production, DR will only be pushed when there is DR returned by the landing operator.
@@ -106,7 +106,7 @@ tags_metadata = [
 ]
 
 app = FastAPI(
-    title="CMI SMS API",
+    title="CMI CloudSMS API",
     description=desc,
     openapi_tags=tags_metadata,
     version="0.1.0",
