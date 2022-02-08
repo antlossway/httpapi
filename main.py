@@ -15,6 +15,7 @@ import json
 from email_validator import validate_email
 from collections import defaultdict
 import os
+import requests
 
 #import myutils
 from myutils import logger, read_comma_sep_lines, gen_udh_base, gen_udh, generate_otp
@@ -36,24 +37,33 @@ max_len_tpoa = 11
 redis_status_expire = 15*24*3600 # STATUS:<msgid1> => <status> for /sms/:msgid query_dlr
 
 desc = """
-**REST API helps you to send all types of SMS and check delivery status.**\n
-Delivery status can also be pushed to client’s WebHook (HTTP(S) callback).\n
+**REST API helps you to send all types of SMS and query delivery status.**\n
+Delivery Report can also be pushed to client’s WebHook (HTTP(S) callback).\n
 Mobile Numbers are specified in E.164 format (International format including country code).\n
 HTTP Request body and response use JSON format.\n
 Each request requires a BASIC authentication(api_key/api_secret) with IP whitelisting.
 
 ## Create SMS (production)
 
-POST /api/sms
+**POST /api/sms**
 
 ## Create SMS (Test only)
-This is to help developer test request/response, no SMS is really created or charged
+This is to help developer test request/response format, no SMS is really created or charged.
 
-POST /api/test/sms
+**POST /api/test/sms**
 
 ## Query Status
 
-GET /api/sms/{msgid}
+**GET /api/sms/{msgid}**
+
+## Test Delivery Report(DR) Callback (Test only)
+The Customer need to deploy an HTTP(S) server to receive DR receipt pushed from our API.\n
+This endpoint is to help developer to test the format of push DR, API will POST a test DR to the callback_url you provided.
+
+DR will only be pushed when there is DR returned by the landing operator.
+
+**POST /api/test/callback_dlr**
+
 """
 
 tags_metadata = [
@@ -73,6 +83,11 @@ tags_metadata = [
         "name": "Query SMS Status",
         "description": "Client can query individule SMS's delivery status by providing msgid",
     },
+    {
+        "name": "Test callback: push DLR format",
+        "description": "Client provide callback_url to test the push DLR format",
+    },
+
 ]
 
 app = FastAPI(
@@ -266,47 +281,39 @@ def post_sms(request: Request,account,arg_sms,mode):
 
 
 #@app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
-@app.post('/api/callback_dlr', status_code=200) # to receive push DLR from providers, don't expose in API docs
-async def callback_dlr(arg_dlr: models.CallbackDLR, request: Request):
-    logger.info(f"{request.url.path}: from {request.client.host}")
-    d_dlr = arg_dlr.dict()
-    logger.info("### receive DLR")
-    logger.info(json.dumps(d_dlr, indent=4))
-    bnumber = arg_dlr.msisdn
-    msgid2 = arg_dlr.msgid
-    status = arg_dlr.status
-    timestamp = arg_dlr.timestamp
-    
-    bnumber = re.sub(r'^\+','',bnumber) #remove beginning +
-    bnumber = re.sub(r'^0+','',bnumber) #remove beginning 0
-    bnumber = "+" + bnumber #add back beginning +
+@app.post('/api/test/callback_dlr', status_code=200, tags=["Test callback: push DLR format"]) # to let developer test a push DLR, input their callback_url, and we will post DLR back, so they can check the format received.
+async def callback_dlr(arg_d: models.TestCallbackRequest):
+    d = arg_d.dict()
+    logger.info(json.dumps(d, indent=4))
+    callback_url = arg_d.callback_url
 
-    #query redis MSGID2:msgid2 => msgid1:::api_key:::require_dlr
-    msg_info = r.get(f"MSGID2:{msgid2}") #this is inserted by script who take care posting SMS to HTTP provider's interface
-    
-    if msg_info:
-        msg_info = msg_info.decode("utf-8") # result from redis-server is byte, need to convert to str
-        logger.info(f"## find mapping msgid1 for msgid2 {msgid2}: {msg_info}")
-        msgid1, api_key, require_dlr = msg_info.split(":::")
-        if int(require_dlr) == 1:
-            ac = g_account.get(api_key)
-            callback_url = ac.get('callback_url')
-            logger.info(f"will push back DLR to {callback_url}")
-            pass # TBD: push back DLR to client
-        
-        ### notif3: to be processed by notif3update to update status in cdr
-        sql = f"insert into notif3 (bnumber,msgid,localid,status) values ('{bnumber}','{msgid2}','{msgid1}','{status}');"
-        logger.info(sql)
-        cur.execute(sql)
+    req_json = {
+        "msisdn": "6588001000",
+        "sender": "INFO",
+        "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
+        "status": "DELIVERD",
+        "timestamp": "2022-02-01 00:00"
+    }
 
-        ### redis: STATUS:msgid1 => status
-        k = f"STATUS:{msgid1}"
-        r.setex(k, redis_status_expire, value=status)
-        logger.info(f"SETEX {k} {redis_status_expire} {status}")
+    logger.info(f"### post test DLR to client's callback url {callback_url}:\n{json.dumps(req_json, indent=4)}")
+    resp = requests.post(callback_url, json=req_json, timeout=(1,3))
 
-    else:
-        logger.warning(f"!!! no msgid1 mapping found for {msgid2}")
+    try:
+#        req_body = resp.request.body.decode() # resp.request.body is byte, use decode() to turn to str
+#        req_json = json.loads(req_body) # convert from str to json
+#        logger.info(f"### post test DLR to client's callback url {callback_url}:\n{json.dumps(req_json, indent=4)}")
 
+        resp_json = resp.json()
+        print(f"response from {callback_url}: {json.dumps(resp_json, indent=4)}")
+    except:
+        print(f"!!! no response from {callback_url}")
+        pass
+
+#    logger.info("### print example push DLR format to client:")
+#    logger.info(json.dumps(req_json, indent=4))
+ 
+    #return resp_json
+    return JSONResponse(status_code=200, content=req_json)
 
 
 @app.post('/api/internal/cpg') #UI get uploaded file from user, call this API to process data, if data valid will create campaign
@@ -1791,7 +1798,6 @@ async def query_sms_status(msgid: str, account=Depends(myauth.authenticate) # mu
     res = r.hgetall(index)
     d_res = { k.decode('utf-8'): res.get(k).decode('utf-8') for k in res.keys() }
 
-    print(f"get status for {index}, result: {json.dumps(d_res,indent=4)}")
 
     ### either Pending or redis cache expired, query postgreSQL
     if len(d_res) == 0:
@@ -1809,11 +1815,13 @@ async def query_sms_status(msgid: str, account=Depends(myauth.authenticate) # mu
     
             resp_json = {
                 "msisdn": bnumber,
-                "to": tpoa,
+                "sender": tpoa,
                 "msgid": msgid,
                 "status": status,
                 "timestamp": timestamp
             }
+            logger.info(f"query_sms_status found status in cdr, result: {json.dumps(resp_json,indent=4)}")
+
         except: # no record found in postgreSQL cdr table
             resp_json = {
                 "errorcode": 1006,
@@ -1822,9 +1830,8 @@ async def query_sms_status(msgid: str, account=Depends(myauth.authenticate) # mu
             return JSONResponse(status_code=404, content=resp_json)
 
     else:
-       resp_json = d_res
+        logger.info(f"query_sms_status found entry in redis {index}, result: {json.dumps(d_res,indent=4)}")
+        resp_json = d_res
     
     return JSONResponse(status_code=200, content=resp_json)
     
-       
- 

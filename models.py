@@ -39,21 +39,24 @@ class SMSResponse(BaseModel):
 ### reply query status from our HTTP client
 class QueryStatusResponse(BaseModel):
     msisdn: str = Field(example='6588001000')
-    to: Optional[str] = Field(example='INFO')
-    msgid: str = Field(example="EOURQwerewrhoi23")
+    sender: Optional[str] = Field(example='INFO')
+    msgid: str = Field(example="77b16382-7871-40bd-a1ac-a26c6ccce687")
     status: str = Field(example="DELIVERD")
     #dlr_timestamp: Optional[str] = Field(alias="dlr-timestamp", example="2022-01-29 00:00")
     timestamp: Optional[str] = Field(example="2022-02-01 00:00")
 
 
-### this is to receive DLR from HTTP provider
-class CallbackDLR(BaseModel):
+### developer can test what will be received on callback_url for DLR status
+class TestCallbackRequest(BaseModel):
+    callback_url: str = Field(example="https://example.com/callback")
+    
+class TestCallbackResponse(BaseModel):
     msisdn: str = Field(example='6588001000')
-    to: Optional[str] = Field(example='INFO')
-    msgid: str = Field(example="EOURQwerewrhoi23")
+    sender: Optional[str] = Field(example='INFO')
+    msgid: str = Field(example="77b16382-7871-40bd-a1ac-a26c6ccce687")
     status: str = Field(example="DELIVERD")
     #dlr_timestamp: Optional[str] = Field(alias="dlr-timestamp", example="2022-01-29 00:00")
-    timestamp: Optional[str] = Field(example="2022-01-29 00:00")
+    timestamp: Optional[str] = Field(example="2022-02-01 00:00")
 
 class InternalNewCampaign(BaseModel):
     blast_list: List[str]
