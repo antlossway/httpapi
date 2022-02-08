@@ -40,27 +40,36 @@ desc = """
 **REST API helps you to send all types of SMS and query delivery status.**\n
 Delivery Report can also be pushed to client’s WebHook (HTTP(S) callback).\n
 Mobile Numbers are specified in E.164 format (International format including country code).\n
-HTTP Request body and response use JSON format.\n
-Each request requires a BASIC authentication(api_key/api_secret) with IP whitelisting.
+HTTP Request and Response Body use JSON format.\n
+Each request requires a Basic Authentication (api_key/api_secret) with IP whitelisting.
 
 ## Create SMS (production)
+Require Basic Authentication + IP filtering
 
 **POST /api/sms**
 
 ## Create SMS (Test only)
-This is to help developer test request/response format, no SMS is really created or charged.
+This is to help you test request/response format, no SMS is really created or charged.\n
+Require Basic Authentication, no IP filtering
 
 **POST /api/test/sms**
 
-## Query Status
+## Query Status (production)
+Require Basic Authentication + IP filtering
 
 **GET /api/sms/{msgid}**
 
-## Test Delivery Report(DR) Callback (Test only)
-The Customer need to deploy an HTTP(S) server to receive DR receipt pushed from our API.\n
-This endpoint is to help developer to test the format of push DR, API will POST a test DR to the callback_url you provided.
+## Query Status (Test only)
+Require Basic Authentication, no IP filtering
 
-DR will only be pushed when there is DR returned by the landing operator.
+**GET /api/test/sms/{msgid}**
+
+
+## Test Delivery Report(DR) Callback (Test only)
+The Customer need to deploy an HTTP(S) server to receive DR receipt pushed from our CloudPlatform.\n
+This endpoint is to help you to test the format of push DR that is posted to the callback_url you provided.
+
+In production, DR will only be pushed when there is DR returned by the landing operator.
 
 **POST /api/test/callback_dlr**
 
@@ -69,11 +78,21 @@ DR will only be pushed when there is DR returned by the landing operator.
 tags_metadata = [
     {
         "name": "Test Create SMS",
-        "description": "This is to help developer test request/response, no SMS is really created or charged, will not filter IP",
+        "description": "This is to help you test request/response, no SMS is really created or charged, Require Basic Authentication, no IP filtering",
     },
     {
+        "name": "Test Query SMS Status",
+        "description": "This is to help develper test request/response. Require Basic Authentication, no IP filtering",
+    },
+
+    {
+        "name": "Test callback: push DLR format",
+        "description": "Client provide callback_url to test the push DLR format",
+    },
+
+    {
         "name": "Create SMS",
-        "description": "production endpoint to send SMS, basic authentication + IP whitelisting are required",
+        "description": "production endpoint to send SMS, Require Basic Authentication + IP filtering",
         #"externalDocs": {
         #    "description": "Items external docs",
         #    "url": "https://fastapi.tiangolo.com/",
@@ -81,11 +100,7 @@ tags_metadata = [
     },
     {
         "name": "Query SMS Status",
-        "description": "Client can query individule SMS's delivery status by providing msgid",
-    },
-    {
-        "name": "Test callback: push DLR format",
-        "description": "Client provide callback_url to test the push DLR format",
+        "description": "Client can query individule SMS's delivery status by providing msgid, Require Basic Authentication + IP filtering",
     },
 
 ]
@@ -130,7 +145,7 @@ async def test_create_sms(request: Request,
                     ...,
                     examples=mysms.example_create_sms,
                 ),
-account=Depends(myauth.authenticate_test) # allow developer to 
+account=Depends(myauth.authenticate_test)
 ):
     result = post_sms(request,account,arg_sms,"test")
     return result
@@ -281,7 +296,7 @@ def post_sms(request: Request,account,arg_sms,mode):
 
 
 #@app.post('/api/callback_dlr', include_in_schema=False, status_code=200) # to receive push DLR from providers, don't expose in API docs
-@app.post('/api/test/callback_dlr', status_code=200, tags=["Test callback: push DLR format"]) # to let developer test a push DLR, input their callback_url, and we will post DLR back, so they can check the format received.
+@app.post('/api/test/callback_dlr', status_code=200, response_model=models.TestCallbackResponse, tags=["Test callback: push DLR format"])
 async def callback_dlr(arg_d: models.TestCallbackRequest):
     d = arg_d.dict()
     logger.info(json.dumps(d, indent=4))
@@ -318,7 +333,7 @@ async def callback_dlr(arg_d: models.TestCallbackRequest):
     #return resp_json
     return JSONResponse(status_code=200, content=req_json)
 
-#### query SMS status
+#### query SMS status production
 @app.get('/api/sms/{msgid}', response_model=models.QueryStatusResponse, 
          responses={404: {"model": models.MsgNotFound}},
          tags=["Query SMS Status"])
@@ -362,6 +377,54 @@ async def query_sms_status(msgid: str, account=Depends(myauth.authenticate) # mu
 
     else:
         logger.info(f"query_sms_status found entry in redis {index}, result: {json.dumps(d_res,indent=4)}")
+        resp_json = d_res
+    
+    return JSONResponse(status_code=200, content=resp_json)
+
+#### query SMS status test
+@app.get('/api/test/sms/{msgid}', response_model=models.QueryStatusResponse, 
+         responses={404: {"model": models.MsgNotFound}},
+         tags=["Test Query SMS Status"])
+async def test_query_sms_status(msgid: str, account=Depends(myauth.authenticate_test) # multiple authentication methods, account is dict including many info
+):
+    ### check if redis has cache
+    index = f"STATUS:{msgid}"
+    res = r.hgetall(index)
+    d_res = { k.decode('utf-8'): res.get(k).decode('utf-8') for k in res.keys() }
+
+
+    ### either Pending or redis cache expired, query postgreSQL
+    if len(d_res) == 0:
+        logger.info(f"redis {index} does not exist, maybe still pending or redis expire, check cdr table")
+        cur.execute("select tpoa,bnumber,status,notif3_dbtime from cdr where msgid=%s", (msgid,))
+        row = cur.fetchone()
+        try:
+            (tpoa,bnumber,status,notif3_dbtime) = row
+    
+            if not status or status == '':
+                status = 'Pending'
+                timestamp = ""
+            else:
+                timestamp = notif3_dbtime.strftime("%Y-%m-%d, %H:%M:%S")
+    
+            resp_json = {
+                "msisdn": bnumber,
+                "sender": tpoa,
+                "msgid": msgid,
+                "status": status,
+                "timestamp": timestamp
+            }
+            logger.info(f"test_query_sms_status found status in cdr, result: {json.dumps(resp_json,indent=4)}")
+
+        except: # no record found in postgreSQL cdr table
+            resp_json = {
+                "errorcode": 1006,
+                "errormsg": "MsgID not found"
+            }
+            return JSONResponse(status_code=404, content=resp_json)
+
+    else:
+        logger.info(f"test_query_sms_status found entry in redis {index}, result: {json.dumps(d_res,indent=4)}")
         resp_json = d_res
     
     return JSONResponse(status_code=200, content=resp_json)
