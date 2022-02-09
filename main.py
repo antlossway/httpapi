@@ -44,7 +44,11 @@ HTTP Request and Response Body use JSON format.\n
 Each request requires a Basic Authentication (api_key/api_secret) with IP whitelisting.
 
 ## Create SMS (production)
-Require Basic Authentication + IP filtering
+Require Basic Authentication + IP filtering\n
+support
+ * Single short SMS
+ * Single long SMS (concatenated, multi-part)
+ * Bulk SMS (comma separated MSISDN list)
 
 **POST /api/sms**
 
@@ -195,13 +199,12 @@ def post_sms(request: Request,account,arg_sms,mode):
         return JSONResponse(status_code=422, content=resp_json)
 
     ### optional param
-    #base64 = d_sms.get("base64url",0)
     base64 = arg_sms.base64url #default 0, non-zero is considered 1
     require_dlr = arg_sms.status_report_req #default 1
     orig_udh = arg_sms.udh #default None
 
     if base64 != 0:
-        logger.info("##### incoming content is already base64url encoded")
+        logger.info("##### incoming content is already base64url encoded, qrouter should decoded it")
 
     ### get split info
     sms = smsutil.split(content)
@@ -250,7 +253,8 @@ def post_sms(request: Request,account,arg_sms,mode):
                     "to": bnumber,
                     "content": xms,
                     "udh": udh,
-                    "dcs": dcs
+                    "dcs": dcs,
+                    "base64url": base64
                     #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
                     #"operator_id": operator_id,
                 }

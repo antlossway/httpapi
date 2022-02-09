@@ -232,8 +232,9 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
 #            "sender": sender,
 #            "to": msisdn,
 #            "content": xms,
-#            "udh": udh
-#            "dcs": dcs 
+#            "udh": udh,
+#            "dcs": dcs,
+#            "base64url": base64 (0 or 1)
 #            }
 
     logger.info(f"### debug: account {ac}")
@@ -251,6 +252,7 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
     udh = data.get('udh','')
     #cpg_id = data.get('cpg_id',0)
     dcs = data.get('dcs',0)
+    base64url = data.get('base64url',0)
 
     ### - 
     d_sms = {
@@ -258,7 +260,8 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
         "tpoa": sender,
         "bnumber": bnumber,
         "xms": xms,
-        "dcs": dcs
+        "dcs": dcs,
+        "base64url": base64url,
     }
 
     if udh:
