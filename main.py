@@ -50,23 +50,23 @@ support
  * Single long SMS (concatenated, multi-part)
  * Bulk SMS (comma separated MSISDN list)
 
-**POST /api/sms**
+**POST https://dev1.ameex-mobile.com/api/sms**
 
 ## Create SMS (Test only)
 This is to help you test request/response format, no SMS is really created or charged.\n
 Require Basic Authentication, no IP filtering
 
-**POST /api/test/sms**
+**POST https://dev1.ameex-mobile.com/api/test/sms**
 
 ## Query Status (production)
 Require Basic Authentication + IP filtering
 
-**GET /api/sms/{msgid}**
+**GET https://dev1.ameex-mobile.com/api/sms/{msgid}**
 
 ## Query Status (Test only)
 Require Basic Authentication, no IP filtering
 
-**GET /api/test/sms/{msgid}**
+**GET https://dev1.ameex-mobile.com/api/test/sms/{msgid}**
 
 
 ## Test Delivery Report(DR) Callback (Test only)
@@ -75,7 +75,7 @@ This endpoint is to help you to test the format of push DR that is posted to the
 
 In production, DR will only be pushed when there is DR returned by the landing operator.
 
-**POST /api/test/callback_dlr**
+**POST https://dev1.ameex-mobile.com/api/test/callback_dlr**
 
 """
 
