@@ -8,8 +8,8 @@ import re
 
 #from mysms import clean_msisdn => cause circular import
 
-basedir = os.path.abspath(os.path.dirname(__file__))
-log = basedir + '/log/' + 'httpapi.log'
+basedir = os.path.abspath(os.path.dirname(__file__)) # /home/amx/httpapi
+log = basedir + '/log/' + 'httpapi.log'  # /home/amx/httpapi/log/httpapi.log
 config_file = basedir + '/' + '.config' # to keep private info, DB password, API credential ...
 
 def read_config():
@@ -53,6 +53,8 @@ handler.setFormatter(formatter)
 # add the handler to the logger
 logger.addHandler(handler)
 #logger.addHandler(c_handler)
+
+logger.debug(f"### log file: {log}")
 
 ########################
 ### Configurations   ###
