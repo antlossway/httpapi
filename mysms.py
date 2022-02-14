@@ -270,10 +270,12 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
     with r.pipeline() as pipe:
         ### sms: redis HASH index HTTPSMS:{msgid}: 
         index = f"HTTPSMS:{msgid}"
-        for k,v in d_sms.items():
+#        for k,v in d_sms.items():
 #            r.hset(index,k,v)
-            logger.info(f"## add SMS detail in redis: HSET {index} {k} \"{v}\"")
-        r.hset(index,mapping=d_sms) #HSET support multiple fields/values
+#            logger.info(f"#### add SMS detail in redis: HSET {index} {k} {v}")
+
+        r.hset(index,mapping=d_sms) #HSET support multiple fields/values, if ever need to recover from log, need to serialize the data to dict first
+        logger.info(f"#### redis: HSET {index} {json.dumps(d_sms)}")
         r.expire(name=index, time=sms_expire) #expire in 3 days
         logger.info(f"#### redis: EXPIRE {index} {sms_expire}")
  
