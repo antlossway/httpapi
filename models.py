@@ -29,6 +29,7 @@ class Msg(BaseModel):
     msgid: str = Field(description="unique message ID to identify an created SMS",example="77b16382-7871-40bd-a1ac-a26c6ccce687")
     to: str = Field(description="receipient of the SMS, MSISDN, in E.164 format", 
                     min_length=10, max_length=20, example="96650403020")
+    encoding: str = Field(description="encoding", example="gsm0338, utf_16_be")
 
 class SMSResponse(BaseModel):
     errorcode: int = Field(description="indicate result of creating SMS, 0 means successful", default=0)

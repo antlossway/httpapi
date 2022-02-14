@@ -58,7 +58,8 @@ example_create_sms_response = {
                             "messages": [
                                 {
                                     "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
-                                    "to": "6588001000"
+                                    "to": "6588001000",
+                                    "encoding": "gsm0338"
                                 }
                             ]
                         },
@@ -72,15 +73,18 @@ example_create_sms_response = {
                             "messages": [
                                 {
                                     "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
-                                    "to": "6588001000"
+                                    "to": "6588001000",
+                                    "encoding": "gsm0338"
                                 },
                                 {
                                     "msgid": "9d316085-cc29-4fb6-9522-6ad8748fcb89",
-                                    "to": "6588001000"
+                                    "to": "6588001000",
+                                    "encoding": "gsm0338"
                                 },
                                 {
                                     "msgid": "def6196e-3b73-4a1a-9d1b-f46cbf139645",
-                                    "to": "6588001000"
+                                    "to": "6588001000",
+                                    "encoding": "gsm0338"
                                 }
                             ]
                         },
@@ -94,11 +98,13 @@ example_create_sms_response = {
                             "messages": [
                                 {
                                     "msgid": "77b16382-7871-40bd-a1ac-a26c6ccce687",
-                                    "to": "6588001000"
+                                    "to": "6588001000",
+                                    "encoding": "gsm0338"
                                 },
                                 {
                                     "msgid": "9d316085-cc29-4fb6-9522-6ad8748fcb89",
-                                    "to": "6599000100"
+                                    "to": "6599000100",
+                                    "encoding": "gsm0338"
                                 }
                             ]
                         },

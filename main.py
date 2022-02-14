@@ -235,7 +235,7 @@ def post_sms(request: Request,account,arg_sms,mode):
                 xms = part.content
                 msgid = str(uuid4())
         
-                resp_msg = {"msgid": msgid, "to": bnumber}
+                resp_msg = {"msgid": msgid, "to": bnumber, "encoding": encoding}
                 l_resp_msg.append(resp_msg)
         
                 if orig_udh != None and orig_udh != '':
