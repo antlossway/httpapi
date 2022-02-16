@@ -5,7 +5,7 @@ import json
 import re
 
 from myutils import logger,config
-from mydb import g_numbering_plan, r
+from mydb import r
 
 notif1_expire = 4*24*3600 #redis: MSGID2:msgid2 => msgid1:::api_key:::require_dlr
 sms_expire = 3*24*3600
@@ -289,14 +289,14 @@ def create_sms(ac,data): #ac: dict inclues account info, data: dict includes sms
         index_notif1 = f"{bnumber}:::{msgid}"
         value = f"HTTP:::{api_key}"
         r.hset(index_notif1,"CUSTOMER",value)
-        logger.info(f"## record notif1 in redis: HSET {index_notif1} CUSTOMER {value}")
+        logger.info(f"#### notif1 redis: HSET {index_notif1} CUSTOMER {value}")
         r.expire(name=index_notif1, time=notif1_expire)
         logger.info(f"#### redis: EXPIRE {index_notif1} {notif1_expire}")
 
         ### lpush redis list HTTPIN:{api_key}: {msgid}
         redis_list = f"HTTPIN:{api_key}"
         r.lpush(redis_list, msgid)
-        logger.info(f"##add msgid in list redis: LPUSH {redis_list} {msgid}")
+        logger.info(f"#### push msgid in list redis: LPUSH {redis_list} {msgid}")
  
         pipe.execute()
   
@@ -330,7 +330,7 @@ def parse_bnumber(np,msisdn):
 
     
 if __name__ == '__main__':
-    # msgid = str(uuid4())
+    msgid = str(uuid4())
     # ac = {
     #     'webuser_id': 1,
     #     'billing_id': 1,
@@ -347,9 +347,4 @@ if __name__ == '__main__':
     # }
     # error,msgid2 = create_sms_ameex(ac,data,'AMEEX_PREMIUM')
     # print(f"debug call result: {error}, {msgid2}")
-
-    result = parse_bnumber(g_numbering_plan, '+089')
-    if result:
-        cid,opid = result.split('---')
-        print(cid,opid)
 

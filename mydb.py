@@ -9,13 +9,11 @@ from myutils import config,logger
 ########################
 ### Global Variables ###
 ########################
-g_userinfo = defaultdict(dict) #info from legacy table 
+#g_userinfo = defaultdict(dict) #info from legacy table 
+
 g_account = defaultdict(dict) #info from new tables
 g_numbering_plan = dict()
 
-# basedir = os.path.abspath(os.path.dirname(__file__))
-# config_dir = basedir + "/" + "config/"
-# redis_cfg = config_dir + "redis.cfg"
 db_host = config['postgresql']['host']
 db_name = config['postgresql']['db']
 db_user = config['postgresql']['user']
@@ -30,24 +28,6 @@ except Exception as error:
 logger.info("DB connected")
 cur = db.cursor()
 
-#### redis ####
-# def read_redis_config():
-#     d = dict()
-#     with open(redis_cfg, 'r',encoding='utf-8') as f:
-#         lines = f.readlines()
-#         for line in lines:
-#             (k,v) = line.strip().split('=')
-#             if k == 'host':
-#                 d[k] = v
-#             elif k == 'port' or k == 'db':
-#                 d[k] = int(v)
-#     return d
-
-# d_redis = read_redis_config()
-# for k,v in d_redis.items():
-#     logger.info(f"redis param: {k} => {v} ({type(v)})")
-
-# r = redis.Redis(host=f"{d_redis['host']}",port=f"{d_redis['port']}")
 redis_host = config['redis']['host']
 redis_port = config['redis']['port']
 

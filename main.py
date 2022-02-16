@@ -21,7 +21,7 @@ import requests
 from myutils import logger, read_comma_sep_lines, gen_udh_base, gen_udh, generate_otp
 import mysms
 #from mysms import create_sms
-from mydb import cur,r,g_account,g_numbering_plan
+from mydb import cur,r,g_numbering_plan
 #import httpapi.myauth as myauth => does not work, saying there is no package httpapi
 import myauth
 import models
@@ -163,10 +163,10 @@ def post_sms(request: Request,account,arg_sms,mode):
         logger.info(f"{k}: {v}({type(v)})")
     
     sender = d_sms.get("sender", None) #client may sent "from", which is alias as "sender"
-    l_bnumber_in = d_sms.get("to", None).split(',') #comma separated bnumber for bulk process
+    l_bnumber_in = d_sms.get("to", None).split(',') # single bnumber or comma separated bnumber (for bulk)
     content = d_sms.get("content", None)
 
-    l_bnumber = list() #to keep the final cleaned MSISDN
+    l_bnumber = list() #to keep the final cleaned bnumber or bnumber list
     for bnumber in l_bnumber_in:
         bnumber = mysms.clean_msisdn(bnumber)
         if bnumber:
@@ -177,6 +177,9 @@ def post_sms(request: Request,account,arg_sms,mode):
             "errorcode": 1003,
             "errormsg": f"No valid B-number found"
         }
+        logger.info("### post_sms reply client:")
+        logger.info(json.dumps(resp_json, indent=4))
+ 
         return JSONResponse(status_code=422, content=resp_json)
     
     result = {}
@@ -187,6 +190,9 @@ def post_sms(request: Request,account,arg_sms,mode):
             "errorcode": 1002,
             "errormsg": "missing parameter, please check if you forget 'from' or 'content'"
          }
+        logger.info("### post_sms reply client:")
+        logger.info(json.dumps(resp_json, indent=4))
+ 
         return JSONResponse(status_code=422, content=resp_json)
 
     ### sender format wrong
@@ -196,6 +202,9 @@ def post_sms(request: Request,account,arg_sms,mode):
             "errorcode": 1004,
             "errormsg": f"TPOA/Sender length should not be more than {max_len_tpoa} characters"
         }
+        logger.info("### post_sms reply client:")
+        logger.info(json.dumps(resp_json, indent=4))
+ 
         return JSONResponse(status_code=422, content=resp_json)
 
     ### optional param
@@ -211,7 +220,7 @@ def post_sms(request: Request,account,arg_sms,mode):
     split = len(sms.parts)
     encoding = sms.encoding
 
-    logger.info(f"counts of SMS: {split}")
+    logger.info(f"SMS content has {split} part, encoding {encoding}")
     dcs = 0
     if not encoding.startswith('gsm'): #gsm0338 or utf_16_be
         dcs = 8 
@@ -226,66 +235,68 @@ def post_sms(request: Request,account,arg_sms,mode):
     l_resp_msg = list() #list of dict
 
     for bnumber in l_bnumber:
-        ### check B-number country/operator ###
-        parse_result = mysms.parse_bnumber(g_numbering_plan,bnumber)
-        if parse_result:
-            country_id,operator_id = parse_result.split('---')
+        ### disable parse_bnumber as it's adding computing load and our current API does not return country/operator info to client ###
+        """
+        check B-number country/operator
+        """
+        #parse_result = mysms.parse_bnumber(g_numbering_plan,bnumber)
+        #if parse_result:
+        #    country_id,operator_id = parse_result.split('---')
 
-            for i,part in enumerate(sms.parts):
-                xms = part.content
-                msgid = str(uuid4())
-        
-                resp_msg = {"msgid": msgid, "to": bnumber, "encoding": encoding}
-                l_resp_msg.append(resp_msg)
-        
-                if orig_udh != None and orig_udh != '':
-                    udh = orig_udh
-                    logger.info(f"keep orig UDH {udh}")
-                
-                #for long sms, our UDH will override orig UDH from client
-                if udh_base != '':
-                    udh = gen_udh(udh_base,split,i+1)
-                    logger.debug(f"gen_udh: {udh}")
-                
-                data = {
-                    "msgid": msgid,
-                    "sender": sender,
-                    "to": bnumber,
-                    "content": xms,
-                    "udh": udh,
-                    "dcs": dcs,
-                    "base64url": base64
-                    #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
-                    #"operator_id": operator_id,
+        for i,part in enumerate(sms.parts):
+            xms = part.content
+            msgid = str(uuid4())
+    
+            resp_msg = {"msgid": msgid, "to": bnumber, "encoding": encoding}
+            l_resp_msg.append(resp_msg)
+    
+            if orig_udh != None and orig_udh != '':
+                udh = orig_udh
+                logger.info(f"keep orig UDH {udh}")
+            
+            #for long sms, our UDH will override orig UDH from client
+            if udh_base != '':
+                udh = gen_udh(udh_base,split,i+1)
+                logger.debug(f"gen_udh: {udh}")
+            
+            data = {
+                "msgid": msgid,
+                "sender": sender,
+                "to": bnumber,
+                "content": xms,
+                "udh": udh,
+                "dcs": dcs,
+                "base64url": base64
+                #"country_id": country_id,  ## qrouter will take care parse_bnumber for both smpp and http(again)
+                #"operator_id": operator_id,
+            }
+            
+            if require_dlr == 0: #by default require_dlr=1,so no need to add
+                data["require_dlr"] = 0
+            
+    #        account = {
+    #        "api_key": api_key,
+    #        }
+    
+            if mode == "test":
+                errorcode = 0
+                logger.info("Test only, don't create SMS")
+            else:
+                errorcode = mysms.create_sms(account,data)
+    
+            if errorcode == 0:
+                pass
+            else: #no need to process remain parts
+                resp_json = {
+                    "errorcode": 6,
+                    "errormsg": "Internal Server Error, please contact support"
                 }
-                
-                if require_dlr == 0: #by default require_dlr=1,so no need to add
-                    data["require_dlr"] = 0
-                
-        #        account = {
-        #        "api_key": api_key,
-        #        }
-        
-                if mode == "test":
-                    errorcode = 0
-                    logger.info("Test only, don't create SMS")
-                else:
-                    errorcode = mysms.create_sms(account,data)
-        
-                if errorcode == 0:
-                    pass
-                else: #no need to process remain parts
-                    resp_json = {
-                        "errorcode": 6,
-                        "errormsg": "Internal Server Error, please contact support"
-                    }
-                    #raise HTTPException(status_code=500, detail=f"Internal Server Error, please contact support")
-                    return JSONResponse(status_code=422, content=resp_json)
-        
-                    break
-        else:
-            logger.warning(f"Receipient number {bnumber} does not belong to any network")
-             
+                logger.info("### post_sms reply client:")
+                logger.info(json.dumps(resp_json, indent=4))
+ 
+                return JSONResponse(status_code=500, content=resp_json)
+    
+                break
 
     resp_json = {
                  'errorcode': errorcode,

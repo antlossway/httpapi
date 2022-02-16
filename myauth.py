@@ -10,27 +10,13 @@ import json
 import os
 
 from myutils import logger
-from mydb import g_userinfo, g_account
+from mydb import g_account
 
 security = HTTPBasic()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 auth_file = os.path.join(basedir, ".htaccess")
-whitelist_ip = ['127.0.0.1','localhost','13.214.145.167','95.216.217.218']
-
-## test only 
-users = {
-    "bob": {
-        "secret": "pass",
-        "name": "Bob",
-        "dir": "/tmp/sms/BOB/"
-    },
-    "alice":{
-        "secret": "pass",
-        "name": "Alice",
-        "dir": "/tmp/sms/ALICE/"
-    }
-}
+whitelist_ip = ['127.0.0.1','localhost','13.214.145.167','95.216.217.218'] # 13.214.145.167 => frontend, 95.216.217.218 => h-dev on hetzner
 
 def calculate_md5_hex(input_str:str):
     str2bytes = input_str.encode() #convert string into bytes to feed hash function
@@ -38,37 +24,30 @@ def calculate_md5_hex(input_str:str):
     return md5_hex.hexdigest()
 
 #### legacy code logic of A2P server
-def myauth_basic_legacy(credentials: HTTPBasicCredentials = Depends(security)):
-    logger.debug(f"debug: {credentials}")
-    #ac = users.get(credentials.username,None)
-    #expected_secret_enc = ac.get('secret')
-
-    ac = g_userinfo.get(credentials.username,None) #dict
-
-    if ac:
-        expected_secret_enc = ac.get('secret_enc',None)
-        acname = ac.get('name')
-        salt = ac.get('salt')
-    
-        if expected_secret_enc:
-            received_secret_enc = calculate_md5_hex(credentials.password + salt)
-            logger.debug(f"debug: account found with api_key {credentials.username}, expected_secret_enc: {expected_secret_enc} \
-                    received_secret_enc: {received_secret_enc}")
-            password_match = secrets.compare_digest(received_secret_enc, expected_secret_enc )
-            #password_match = True
-            if password_match:
-                return acname
-    logger.warning("debug: basic auth failed")
-
-    #either api_key or api_secret does not match
-    # raise HTTPException(
-    #     status_code=401, #unauthorized
-    #     detail="Incorrect api_key or api_secret"
-    # )
-    return False
+#def myauth_basic_legacy(credentials: HTTPBasicCredentials = Depends(security)):
+#    logger.debug(f"debug: {credentials}")
+#
+#    ac = g_userinfo.get(credentials.username,None) #dict
+#
+#    if ac:
+#        expected_secret_enc = ac.get('secret_enc',None)
+#        acname = ac.get('name')
+#        salt = ac.get('salt')
+#    
+#        if expected_secret_enc:
+#            received_secret_enc = calculate_md5_hex(credentials.password + salt)
+#            logger.debug(f"debug: account found with api_key {credentials.username}, expected_secret_enc: {expected_secret_enc} \
+#                    received_secret_enc: {received_secret_enc}")
+#            password_match = secrets.compare_digest(received_secret_enc, expected_secret_enc )
+#            #password_match = True
+#            if password_match:
+#                return acname
+#    logger.warning("debug: basic auth failed")
+#
+#    return False
 
 
-### new basic auth, get more info for account , but g_account is only loaded when server started
+### new basic auth, get more info for account , but g_account is only loaded when server started, now we use myauth_basic_authfile instead
 def myauth_basic(credentials: HTTPBasicCredentials = Depends(security)):
     logger.debug(f"debug: {credentials}")
 
@@ -147,8 +126,6 @@ def myauth_basic_authfile(request:Request, credentials: HTTPBasicCredentials = D
                 logger.warning("!!! api_secret does not match")
         else:
             logger.warning("!!! no api_secret found")
-
-    logger.warning("!!! no IP configured in table whitelist_ip for api_key {api_key}") 
 
     return False
 
