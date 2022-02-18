@@ -444,20 +444,3 @@ async def test_query_sms_status(msgid: str, account=Depends(myauth.authenticate_
     
     return JSONResponse(status_code=200, content=resp_json)
     
-def get_userid_from_username(username):
-    cur.execute("select id from webuser where username=%s",(username,))
-    try:
-        webuser_id = cur.fetchone()[0]
-        return webuser_id
-    except:
-        return None
-
-def get_userid_from_email(email):
-    cur.execute("select id from webuser where email=%s",(email,))
-    try:
-        webuser_id = cur.fetchone()[0]
-        return webuser_id
-    except:
-        return None
-
-
